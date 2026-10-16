@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TICKS testnet</title>
+  <style>
+    :root { --bg: #0b0c10; --card: #15171d; --line: #262a33; --text: #e9ebf0; --muted: #8b90a0; --lime: #b7f34a; --red: #ff7a7a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 16px; }
+    h1 { font-size: 22px; margin: 0; }
+    .sub { color: var(--muted); margin: 0; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    h2 { font-size: 15px; margin: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+    .stat b { display: block; font: 600 18px ui-monospace, SFMono-Regular, monospace; }
+    .stat span { color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input { flex: 1; min-width: 140px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px ui-monospace, monospace; }
+    button { background: var(--lime); color: #111; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
+    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+    button:disabled { opacity: .5; cursor: default; }
+    #log { font: 13px/1.6 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+    #log .err { color: var(--red); }
+    a { color: var(--lime); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>TICKS on Robinhood testnet</h1>
+    <p class="sub">The real launch setup with test ETH: buy, sell and collect the pool fee</p>
+  </div>
+
+  <section>
+    <div class="row">
+      <button id="connect">Connect MetaMask</button>
+      <span id="account" class="sub"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pool</h2>
+    <div class="grid">
+      <div class="stat"><b id="mcap">--</b><span>Market cap</span></div>
+      <div class="stat"><b id="price">--</b><span>Price per TICKS</span></div>
+      <div class="stat"><b id="feeRate">--</b><span>Pool fee</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your wallet</h2>
+    <div class="grid">
+      <div class="stat"><b id="ethBal">--</b><span>ETH</span></div>
+      <div class="stat"><b id="tokBal">--</b><span>TICKS</span></div>
+    </div>
+    <div class="row">
+      <input id="buyAmount" value="0.001" inputmode="decimal" aria-label="ETH to spend" />
+      <button id="buy" disabled>Buy with ETH</button>
+    </div>
+    <div class="row">
+      <input id="sellAmount" value="100000" inputmode="decimal" aria-label="TICKS to sell" />
+      <button id="sell" disabled>Sell TICKS</button>
+    </div>
+  </section>
+
+  <section id="ownerPanel" class="hidden">
+    <h2>Pool owner</h2>
+    <p class="sub">This wallet owns the position, so every trade's fee builds up here until collected</p>
+    <div class="row"><button id="collect">Collect fees</button></div>
+  </section>
+
+  <section>
+    <h2>Activity</h2>
+    <div id="log">Load the page through the local server, then connect MetaMask</div>
+  </section>
+</main>
+
+<script type="module">
+  import {
+    createPublicClient, createWalletClient, custom, http, parseEther, formatEther, erc20Abi,
+    encodeAbiParameters, parseAbi, maxUint256,
+  } from "https://cdn.jsdelivr.net/npm/viem@2.57.7/+esm";
+
+  const chain = {
+    id: 46630,
+    name: "Robinhood Chain Testnet",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
+    blockExplorers: { default: { name: "Explorer", url: "https://explorer.testnet.chain.robinhood.com" } },
+  };
+  const STATE_VIEW = "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b";
+  const MIN_SQRT = 4295128739n + 1n;
+  const MAX_SQRT = 1461446703485210103287273052203988822378723970342n - 1n;
+
+  const routerAbi = parseAbi([
+    "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,(bool takeClaims,bool settleUsingBurn) testSettings,bytes hookData) payable returns (int256)",
+  ]);
+  const stateViewAbi = parseAbi([
+    "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+  ]);
+  const posmAbi = parseAbi([
+    "function modifyLiquidities(bytes unlockData,uint256 deadline) payable",
+    "function ownerOf(uint256 id) view returns (address)",
+  ]);
+
+  const $ = (id) => document.getElementById(id);
+  // ?rpc=http://127.0.0.1:8548 points the page at a local fork instead of the public testnet.
+  const pub = createPublicClient({ chain, transport: http(new URLSearchParams(location.search).get("rpc") || undefined) });
+  let d, wallet, account;
+
+  function log(text, isError = false) {
+    const line = document.createElement("div");
+    if (isError) line.className = "err";
+    line.innerHTML = text;
+    const box = $("log");
+    if (box.dataset.started !== "1") { box.textContent = ""; box.dataset.started = "1"; }
+    box.prepend(line);
+  }
+  const txLink = (hash) => `<a href="${chain.blockExplorers.default.url}/tx/${hash}" target="_blank" rel="noreferrer">${hash.slice(0, 10)}…</a>`;
+  const usd = (n) => n >= 1 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `$${n.toPrecision(3)}`;
+  const key = () => ({ currency0: d.currency0, currency1: d.currency1, fee: d.fee, tickSpacing: d.tickSpacing, hooks: "0x0000000000000000000000000000000000000000" });
+
+  async function refresh() {
+    const [sqrt] = await pub.readContract({ address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [d.poolId] });
+    const tokensPerEth = (Number(sqrt) / 2 ** 96) ** 2;
+    const ethPrice = d.ethPriceUsdE6 / 1e6;
+    const priceUsd = ethPrice / tokensPerEth;
+    $("price").textContent = usd(priceUsd);
+    const supplyTokens = typeof d.supply === "string" ? Number(BigInt(d.supply) / 10n ** 18n) : d.supply / 1e18;
+    $("mcap").textContent = usd(priceUsd * supplyTokens);
+    $("feeRate").textContent = `${d.fee / 10000}%`;
+    if (!account) return;
+    const [eth, tok] = await Promise.all([
+      pub.getBalance({ address: account }),
+      pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
+    ]);
+    $("ethBal").textContent = Number(formatEther(eth)).toFixed(5);
+    $("tokBal").textContent = Number(formatEther(tok)).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+
+  async function send(label, request) {
+    try {
+      const hash = await wallet.writeContract({ account, chain, ...request });
+      log(`${label}: sent ${txLink(hash)}`);
+      const receipt = await pub.waitForTransactionReceipt({ hash });
+      log(`${label}: ${receipt.status === "success" ? "confirmed" : "failed"} ${txLink(hash)}`, receipt.status !== "success");
+      await refresh();
+      return receipt;
+    } catch (error) {
+      log(`${label}: ${error.shortMessage || error.message}`, true);
+    }
+  }
+
+  $("connect").onclick = async () => {
+    if (!window.ethereum) return log("MetaMask is not installed", true);
+    const [addr] = await window.ethereum.request({ method: "eth_requestAccounts" });
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xb626" }] });
+    } catch (error) {
+      if (error.code !== 4902) throw error;
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{ chainId: "0xb626", chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }],
+      });
+    }
+    account = addr;
+    wallet = createWalletClient({ chain, transport: custom(window.ethereum) });
+    $("account").textContent = addr;
+    $("buy").disabled = $("sell").disabled = false;
+    const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
+    $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
+    await refresh();
+  };
+
+  $("buy").onclick = async () => {
+    const value = parseEther($("buyAmount").value);
+    await send("Buy", {
+      address: d.router, abi: routerAbi, functionName: "swap", value,
+      args: [key(), { zeroForOne: true, amountSpecified: -value, sqrtPriceLimitX96: MIN_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
+    });
+  };
+
+  $("sell").onclick = async () => {
+    const amount = parseEther($("sellAmount").value);
+    const allowance = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "allowance", args: [account, d.router] });
+    if (allowance < amount) await send("Approve", { address: d.token, abi: erc20Abi, functionName: "approve", args: [d.router, maxUint256] });
+    await send("Sell", {
+      address: d.router, abi: routerAbi, functionName: "swap",
+      args: [key(), { zeroForOne: false, amountSpecified: -amount, sqrtPriceLimitX96: MAX_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
+    });
+  };
+
+  $("collect").onclick = async () => {
+    const before = await Promise.all([
+      pub.getBalance({ address: account }),
+      pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
+    ]);
+    const actions = "0x0111";
+    const decrease = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint256" }, { type: "uint128" }, { type: "uint128" }, { type: "bytes" }],
+      [BigInt(d.positionId), 0n, 0n, 0n, "0x"],
+    );
+    const take = encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "address" }], [d.currency0, d.currency1, account]);
+    const unlockData = encodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], [actions, [decrease, take]]);
+    const receipt = await send("Collect fees", {
+      address: d.positionManager, abi: posmAbi, functionName: "modifyLiquidities",
+      args: [unlockData, BigInt(Math.floor(Date.now() / 1000) + 1800)],
+    });
+    if (!receipt) return;
+    const tok = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
+    log(`Fees collected: ${formatEther(tok - before[1])} TICKS, and the ETH fee is in the wallet balance (gas was paid from it too)`);
+  };
+
+  try {
+    d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
+    await refresh();
+    log(`Token ${d.token}, position #${d.positionId} owned by ${d.owner}`);
+  } catch (error) {
+    log(`No testnet deployment found: ${error.message}`, true);
+  }
+</script>
+</body>
+</html>

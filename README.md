@@ -28,6 +28,24 @@ cp .env.example .env
 forge test -vv
 ```
 
+## Testnet
+
+Robinhood Chain testnet has the same Uniswap v4 contracts as mainnet, but not the Universal Router the Uniswap app uses, so the testnet has its own small page instead.
+
+1. Get test ETH from the official faucet (https://faucet.testnet.chain.robinhood.com) for the deployer and for the MetaMask account you will test with.
+2. Deploy everything, with your test account as the pool owner:
+
+```sh
+OWNER=<your test account> forge script script/TestnetSetup.s.sol --rpc-url robinhood_testnet \
+  --broadcast --private-key $TESTNET_DEPLOYER_KEY
+```
+
+3. Start the page and open http://127.0.0.1:8091/tools/testnet-ui/ to buy, sell and collect the pool fee with MetaMask:
+
+```sh
+npm run ui
+```
+
 ## Launch
 
 ```sh

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "send": "node tools/send-tokens.mjs"
+    "send": "node tools/send-tokens.mjs",
+    "ui": "python3 -m http.server 8091 --bind 127.0.0.1"
   },
   "dependencies": {
     "viem": "^2.57.7"
