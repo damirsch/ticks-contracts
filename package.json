@@ -1,0 +1,11 @@
+{
+  "name": "ticks-contracts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "send": "node tools/send-tokens.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.57.7"
+  }
+}
