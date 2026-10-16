@@ -26,18 +26,37 @@
       color: var(--text);
       font: 14px/1.5 var(--sans);
       background-color: var(--bg);
+    }
+    /* A faint grid that fades out toward the bottom, behind everything. */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
       background-image:
-        linear-gradient(var(--line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--line) 1px, transparent 1px);
-      background-size: 32px 32px;
-      background-position: -1px -1px;
+        linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+      background-size: 40px 40px;
+      -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
+      mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
     }
     header {
-      position: sticky; top: 0; z-index: 2;
-      display: flex; align-items: center; justify-content: space-between; gap: 16px;
-      padding: 12px 20px; border-bottom: 1px solid var(--line-strong);
+      position: sticky; top: 0; z-index: 3;
+      border-bottom: 1px solid var(--line-strong);
       background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
     }
+    .bar { max-width: 1120px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .wallet { position: relative; }
+    .menu {
+      position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px;
+      background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 2px;
+    }
+    .menu p { margin: 4px 8px 6px; color: var(--dim); font-size: 12px; }
+    .menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: transparent; border: 0; color: var(--text); text-align: left; font-weight: 500; }
+    .menu button:hover { background: var(--bg); }
+    .menu img { width: 22px; height: 22px; border-radius: 6px; }
     .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 14px; }
     .brand .mark { width: 10px; height: 10px; background: var(--lime); transform: rotate(45deg); }
     .brand .slash { color: var(--lime); }
@@ -108,18 +127,21 @@
       .col { display: contents; }
       #market { order: 1; } #ticket { order: 2; } #ownerPanel { order: 3; } #trades { order: 4; } #activity { order: 5; }
     }
-    @media (max-width: 560px) {
-      header { padding: 12px 16px; }
-      .brand .wide { display: none; }
-    }
+    @media (max-width: 880px) { .bar { padding: 12px 16px; } }
+    @media (max-width: 560px) { .brand .wide { display: none; } }
   </style>
 </head>
 <body>
 <header>
-  <div class="brand"><span class="mark"></span>TICKS <span class="wide"><span class="slash">//</span> terminal</span> <span class="tag">testnet</span></div>
-  <div class="head-right">
-    <span class="live"><i></i>Robinhood Chain</span>
-    <button id="connect" class="ghost">Connect wallet</button>
+  <div class="bar">
+    <div class="brand"><span class="mark"></span>TICKS <span class="wide"><span class="slash">//</span> terminal</span> <span class="tag">testnet</span></div>
+    <div class="head-right">
+      <span class="live"><i></i>Robinhood Chain</span>
+      <div class="wallet">
+        <button id="connect" class="ghost" aria-haspopup="menu" aria-expanded="false">Connect wallet</button>
+        <div id="walletMenu" class="menu hidden" role="menu"><p>Choose a wallet</p></div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -353,26 +375,60 @@
     quote();
   };
 
-  $("connect").onclick = async () => {
-    if (!window.ethereum) return log("MetaMask is not installed", true);
-    const [addr] = await window.ethereum.request({ method: "eth_requestAccounts" });
+  // EIP-6963: every installed wallet announces itself, so the player picks one instead of whichever
+  // extension won the race for window.ethereum.
+  const wallets = new Map();
+  window.addEventListener("eip6963:announceProvider", (event) => wallets.set(event.detail.info.uuid, event.detail));
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+  function closeMenu() {
+    $("walletMenu").classList.add("hidden");
+    $("connect").setAttribute("aria-expanded", "false");
+  }
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".wallet")) closeMenu();
+  });
+
+  $("connect").onclick = () => {
+    const found = [...wallets.values()];
+    if (found.length === 0) {
+      if (window.ethereum) return connectWith(window.ethereum);
+      return log("No wallet found. Install MetaMask or another browser wallet", true);
+    }
+    if (found.length === 1) return connectWith(found[0].provider);
+    const menu = $("walletMenu");
+    menu.querySelectorAll("button").forEach((b) => b.remove());
+    for (const { info, provider } of found) {
+      const item = document.createElement("button");
+      item.setAttribute("role", "menuitem");
+      item.innerHTML = `<img alt="" src="${info.icon}" />${info.name}`;
+      item.onclick = () => { closeMenu(); connectWith(provider); };
+      menu.append(item);
+    }
+    menu.classList.toggle("hidden");
+    $("connect").setAttribute("aria-expanded", String(!menu.classList.contains("hidden")));
+  };
+
+  async function connectWith(provider) {
+    let addr;
     try {
-      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xb626" }] });
+      [addr] = await provider.request({ method: "eth_requestAccounts" });
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xb626" }] });
     } catch (error) {
       if (error.code !== 4902) return log(error.message, true);
-      await window.ethereum.request({
+      await provider.request({
         method: "wallet_addEthereumChain",
         params: [{ chainId: "0xb626", chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }],
       });
     }
     account = addr;
-    wallet = createWalletClient({ chain, transport: custom(window.ethereum) });
+    wallet = createWalletClient({ chain, transport: custom(provider) });
     $("connect").textContent = short(addr);
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
     await refresh();
-  };
+  }
 
   $("submit").onclick = async () => {
     const amount = parseEther($("amount").value);
