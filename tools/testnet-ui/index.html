@@ -3,86 +3,182 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TICKS testnet</title>
+  <title>TICKS testnet terminal</title>
   <style>
-    :root { --bg: #0b0c10; --card: #15171d; --line: #262a33; --text: #e9ebf0; --muted: #8b90a0; --lime: #b7f34a; --red: #ff7a7a; }
+    :root {
+      --bg: #08090c;
+      --panel: #0f1116;
+      --line: #20242d;
+      --line-strong: #2c313c;
+      --text: #e8eaef;
+      --muted: #8a909e;
+      --dim: #5b616e;
+      --lime: #b7f34a;
+      --lime-ink: #10140a;
+      --red: #ff6f6f;
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-    main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; display: flex; flex-direction: column; gap: 16px; }
-    h1 { font-size: 22px; margin: 0; }
-    .sub { color: var(--muted); margin: 0; }
-    section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-    h2 { font-size: 15px; margin: 0; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-    .stat b { display: block; font: 600 18px ui-monospace, SFMono-Regular, monospace; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh;
+      color: var(--text);
+      font: 14px/1.5 var(--sans);
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 32px 32px;
+      background-position: -1px -1px;
+    }
+    header {
+      position: sticky; top: 0; z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 20px; border-bottom: 1px solid var(--line-strong);
+      background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 14px; }
+    .brand .mark { width: 10px; height: 10px; background: var(--lime); transform: rotate(45deg); }
+    .brand .slash { color: var(--lime); }
+    .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 10px; }
+    .head-right { display: flex; align-items: center; gap: 12px; }
+    .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+    .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 10px var(--lime); }
+    @media (max-width: 560px) { .live { display: none; } }
+    button { font: 600 14px var(--sans); cursor: pointer; border-radius: 8px; transition: background .15s, border-color .15s, color .15s; }
+    .ghost { background: transparent; color: var(--text); border: 1px solid var(--line-strong); padding: 8px 14px; white-space: nowrap; }
+    .ghost:hover { border-color: var(--muted); }
+    .primary { width: 100%; padding: 14px; border: 0; background: var(--lime); color: var(--lime-ink); font-size: 15px; }
+    .primary.sell { background: var(--red); color: #1a0606; }
+    .primary:disabled { opacity: .45; cursor: default; }
+
+    main { max-width: 1120px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+    @media (max-width: 880px) { main { grid-template-columns: 1fr; padding: 16px; } }
+    .panel { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; }
+    .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .panel-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .panel-head span { color: var(--dim); font-size: 13px; }
+    .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+    .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; border-bottom: 1px solid var(--line); }
+    @media (max-width: 560px) { .stats { grid-template-columns: 1fr 1fr; } }
+    .stat { padding: 16px; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: 0; }
+    .stat b { display: block; font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
+    .stat.big b { font-size: 28px; color: var(--lime); }
     .stat span { color: var(--muted); font-size: 13px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input { flex: 1; min-width: 140px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px ui-monospace, monospace; }
-    button { background: var(--lime); color: #111; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
-    button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
-    button:disabled { opacity: .5; cursor: default; }
-    #log { font: 13px/1.6 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+    .chart { padding: 12px 16px 16px; }
+    .chart svg { width: 100%; height: 200px; display: block; }
+    .empty { color: var(--dim); font-size: 13px; padding: 24px 16px; text-align: center; }
+
+    .tape { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+    th { text-align: left; color: var(--dim); font: 500 12px var(--sans); padding: 10px 16px; border-bottom: 1px solid var(--line); }
+    td { padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    td.r, th.r { text-align: right; }
+    .up { color: var(--lime); }
+    .down { color: var(--red); }
+    td a { color: var(--muted); text-decoration: none; }
+    td a:hover { color: var(--text); }
+
+    .ticket { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; padding: 4px; }
+    .seg button { background: transparent; border: 0; color: var(--muted); padding: 8px; }
+    .seg button.on { background: var(--panel); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .seg button.on[data-side="buy"] { color: var(--lime); }
+    .seg button.on[data-side="sell"] { color: var(--red); }
+    .field { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; padding: 4px 4px 4px 14px; }
+    .field:focus-within { border-color: var(--muted); }
+    .field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); font: 600 20px var(--mono); padding: 10px 0; }
+    .field .unit { color: var(--muted); font-family: var(--mono); }
+    .field .max { background: transparent; border: 1px solid var(--line-strong); color: var(--muted); padding: 6px 10px; font-size: 12px; }
+    .line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+    .line b { color: var(--text); font: 500 13px var(--mono); }
+    .owner { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .owner p { margin: 0; color: var(--muted); font-size: 13px; }
+    #log { padding: 12px 16px; font: 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
     #log .err { color: var(--red); }
-    a { color: var(--lime); }
-    .hidden { display: none; }
+    #log a { color: var(--lime); }
+    .hidden { display: none !important; }
+
+    /* On a phone the ticket comes right after the chart, before the trade list. */
+    @media (max-width: 880px) {
+      .col { display: contents; }
+      #market { order: 1; } #ticket { order: 2; } #ownerPanel { order: 3; } #trades { order: 4; } #activity { order: 5; }
+    }
+    @media (max-width: 560px) {
+      header { padding: 12px 16px; }
+      .brand .wide { display: none; }
+    }
   </style>
 </head>
 <body>
+<header>
+  <div class="brand"><span class="mark"></span>TICKS <span class="wide"><span class="slash">//</span> terminal</span> <span class="tag">testnet</span></div>
+  <div class="head-right">
+    <span class="live"><i></i>Robinhood Chain</span>
+    <button id="connect" class="ghost">Connect wallet</button>
+  </div>
+</header>
+
 <main>
-  <div>
-    <h1>TICKS on Robinhood testnet</h1>
-    <p class="sub">The real launch setup with test ETH: buy, sell and collect the pool fee</p>
+  <div class="col">
+    <section class="panel" id="market">
+      <div class="stats">
+        <div class="stat big"><b id="mcap">--</b><span>Market cap</span></div>
+        <div class="stat"><b id="price">--</b><span>Price</span></div>
+        <div class="stat"><b id="feeRate">--</b><span>Pool fee</span></div>
+        <div class="stat"><b id="tradeCount">--</b><span>Trades</span></div>
+      </div>
+      <div class="chart" id="chart"><div class="empty">The chart fills in as people trade</div></div>
+    </section>
+
+    <section class="panel" id="trades">
+      <div class="panel-head"><h2>Trades</h2><span>Every swap in the pool, newest first</span></div>
+      <div class="tape" id="tape"><div class="empty">No trades yet</div></div>
+    </section>
   </div>
 
-  <section>
-    <div class="row">
-      <button id="connect">Connect MetaMask</button>
-      <span id="account" class="sub"></span>
-    </div>
-  </section>
+  <div class="col">
+    <section class="panel" id="ticket">
+      <div class="ticket">
+        <div class="seg" role="tablist" aria-label="Side">
+          <button data-side="buy" class="on" role="tab" aria-selected="true">Buy</button>
+          <button data-side="sell" role="tab" aria-selected="false">Sell</button>
+        </div>
+        <div class="line"><span>Balance</span><b id="balance">--</b></div>
+        <label class="field">
+          <input id="amount" inputmode="decimal" value="0.001" aria-label="Amount" />
+          <span class="unit" id="unit">ETH</span>
+          <button class="max" id="max" type="button">Max</button>
+        </label>
+        <div class="line"><span>You receive</span><b id="receive">--</b></div>
+        <div class="line"><span>Pool fee</span><b id="feeAmount">--</b></div>
+        <button id="submit" class="primary" disabled>Connect a wallet to trade</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Pool</h2>
-    <div class="grid">
-      <div class="stat"><b id="mcap">--</b><span>Market cap</span></div>
-      <div class="stat"><b id="price">--</b><span>Price per TICKS</span></div>
-      <div class="stat"><b id="feeRate">--</b><span>Pool fee</span></div>
-    </div>
-  </section>
+    <section class="panel hidden" id="ownerPanel">
+      <div class="panel-head"><h2>Pool position</h2><span id="positionLabel"></span></div>
+      <div class="owner">
+        <p>This wallet owns the pool position, so the fee from every trade builds up here until you collect it</p>
+        <button id="collect" class="ghost">Collect fees</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Your wallet</h2>
-    <div class="grid">
-      <div class="stat"><b id="ethBal">--</b><span>ETH</span></div>
-      <div class="stat"><b id="tokBal">--</b><span>TICKS</span></div>
-    </div>
-    <div class="row">
-      <input id="buyAmount" value="0.001" inputmode="decimal" aria-label="ETH to spend" />
-      <button id="buy" disabled>Buy with ETH</button>
-    </div>
-    <div class="row">
-      <input id="sellAmount" value="100000" inputmode="decimal" aria-label="TICKS to sell" />
-      <button id="sell" disabled>Sell TICKS</button>
-    </div>
-  </section>
-
-  <section id="ownerPanel" class="hidden">
-    <h2>Pool owner</h2>
-    <p class="sub">This wallet owns the position, so every trade's fee builds up here until collected</p>
-    <div class="row"><button id="collect">Collect fees</button></div>
-  </section>
-
-  <section>
-    <h2>Activity</h2>
-    <div id="log">Load the page through the local server, then connect MetaMask</div>
-  </section>
+    <section class="panel" id="activity">
+      <div class="panel-head"><h2>Activity</h2><span>Your transactions</span></div>
+      <div id="log">Waiting for the deployment</div>
+    </section>
+  </div>
 </main>
 
 <script type="module">
   import {
     createPublicClient, createWalletClient, custom, http, parseEther, formatEther, erc20Abi,
-    encodeAbiParameters, parseAbi, maxUint256,
+    encodeAbiParameters, parseAbi, parseAbiItem, maxUint256,
   } from "https://cdn.jsdelivr.net/npm/viem@2.57.7/+esm";
 
   const chain = {
@@ -92,6 +188,7 @@
     rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
     blockExplorers: { default: { name: "Explorer", url: "https://explorer.testnet.chain.robinhood.com" } },
   };
+  const POOL_MANAGER = "0x8366a39CC670B4001A1121B8F6A443A643e40951";
   const STATE_VIEW = "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b";
   const MIN_SQRT = 4295128739n + 1n;
   const MAX_SQRT = 1461446703485210103287273052203988822378723970342n - 1n;
@@ -99,61 +196,162 @@
   const routerAbi = parseAbi([
     "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,(bool takeClaims,bool settleUsingBurn) testSettings,bytes hookData) payable returns (int256)",
   ]);
-  const stateViewAbi = parseAbi([
-    "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
-  ]);
+  const stateViewAbi = parseAbi(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)"]);
   const posmAbi = parseAbi([
     "function modifyLiquidities(bytes unlockData,uint256 deadline) payable",
     "function ownerOf(uint256 id) view returns (address)",
   ]);
+  const swapEvent = parseAbiItem("event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)");
+  const initEvent = parseAbiItem("event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)");
 
   const $ = (id) => document.getElementById(id);
   // ?rpc=http://127.0.0.1:8548 points the page at a local fork instead of the public testnet.
-  const pub = createPublicClient({ chain, transport: http(new URLSearchParams(location.search).get("rpc") || undefined) });
-  let d, wallet, account;
+  const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
+  const pub = createPublicClient({ chain, transport: http(rpc) });
+  let d, wallet, account, side = "buy", tokensPerEth = 0, balances = { eth: 0n, tok: 0n };
+
+  const fmt = (n, digits = 2) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
+  const usd = (n) => (n >= 1 ? `$${fmt(n, 0)}` : `$${n.toPrecision(3)}`);
+  const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  const tokensPerEthAt = (sqrt) => (Number(sqrt) / 2 ** 96) ** 2;
+  const supplyTokens = () => (typeof d.supply === "string" ? Number(BigInt(d.supply) / 10n ** 18n) : d.supply / 1e18);
+  const mcapAt = (tpe) => (d.ethPriceUsdE6 / 1e6 / tpe) * supplyTokens();
+  const key = () => ({ currency0: d.currency0, currency1: d.currency1, fee: d.fee, tickSpacing: d.tickSpacing, hooks: "0x0000000000000000000000000000000000000000" });
+  const txLink = (hash) => `<a href="${chain.blockExplorers.default.url}/tx/${hash}" target="_blank" rel="noreferrer">${hash.slice(0, 10)}…</a>`;
+  const abs = (v) => (v < 0n ? -v : v);
 
   function log(text, isError = false) {
+    const box = $("log");
+    if (box.dataset.started !== "1") { box.textContent = ""; box.dataset.started = "1"; }
     const line = document.createElement("div");
     if (isError) line.className = "err";
     line.innerHTML = text;
-    const box = $("log");
-    if (box.dataset.started !== "1") { box.textContent = ""; box.dataset.started = "1"; }
     box.prepend(line);
   }
-  const txLink = (hash) => `<a href="${chain.blockExplorers.default.url}/tx/${hash}" target="_blank" rel="noreferrer">${hash.slice(0, 10)}…</a>`;
-  const usd = (n) => n >= 1 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : `$${n.toPrecision(3)}`;
-  const key = () => ({ currency0: d.currency0, currency1: d.currency1, fee: d.fee, tickSpacing: d.tickSpacing, hooks: "0x0000000000000000000000000000000000000000" });
+
+  function drawChart(points) {
+    const box = $("chart");
+    if (points.length < 2) { box.innerHTML = '<div class="empty">The chart fills in as people trade</div>'; return; }
+    const w = 700, h = 200, pad = 8;
+    const ys = points.map((p) => p.mcap);
+    const lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || hi * 0.01 || 1;
+    const x = (i) => pad + (i / (points.length - 1)) * (w - pad * 2);
+    const y = (v) => h - pad - ((v - lo) / span) * (h - pad * 2);
+    const path = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.mcap).toFixed(1)}`).join(" ");
+    const area = `${path} L${x(points.length - 1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+    box.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Market cap over trades">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b7f34a" stop-opacity=".25"/><stop offset="1" stop-color="#b7f34a" stop-opacity="0"/></linearGradient></defs>
+      <path d="${area}" fill="url(#g)"/><path d="${path}" fill="none" stroke="#b7f34a" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+
+  function drawTape(rows) {
+    $("tradeCount").textContent = String(rows.length);
+    if (!rows.length) { $("tape").innerHTML = '<div class="empty">No trades yet</div>'; return; }
+    const body = rows.slice().reverse().slice(0, 25).map((r) => `<tr>
+      <td class="${r.buy ? "up" : "down"}">${r.buy ? "Buy" : "Sell"}</td>
+      <td class="r">${fmt(r.tokens, 0)}</td>
+      <td class="r">${fmt(r.eth, 5)}</td>
+      <td class="r">${usd(r.mcap)}</td>
+      <td class="r"><a href="${chain.blockExplorers.default.url}/tx/${r.tx}" target="_blank" rel="noreferrer">${short(r.wallet)}</a></td>
+    </tr>`).join("");
+    $("tape").innerHTML = `<table><thead><tr><th>Side</th><th class="r">TICKS</th><th class="r">ETH</th><th class="r">Market cap</th><th class="r">Wallet</th></tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  async function loadHistory() {
+    // RPCs cap a log query at 10M blocks, about a month of Robinhood Chain: plenty for a test pool.
+    const latest = await pub.getBlockNumber();
+    const fromBlock = latest > 9_990_000n ? latest - 9_990_000n : 0n;
+    const [inits, swaps] = await Promise.all([
+      pub.getLogs({ address: POOL_MANAGER, event: initEvent, args: { id: d.poolId }, fromBlock }),
+      pub.getLogs({ address: POOL_MANAGER, event: swapEvent, args: { id: d.poolId }, fromBlock }),
+    ]);
+    const points = inits.map((l) => ({ mcap: mcapAt(tokensPerEthAt(l.args.sqrtPriceX96)) }));
+    const txs = await Promise.all(swaps.map((l) => pub.getTransaction({ hash: l.transactionHash })));
+    const rows = swaps.map((l, i) => {
+      const mcap = mcapAt(tokensPerEthAt(l.args.sqrtPriceX96));
+      points.push({ mcap });
+      // The amounts are the swapper's: on a buy they pay ETH (negative) and receive TICKS.
+      const buy = l.args.amount0 < 0n;
+      return { buy, eth: Number(formatEther(abs(l.args.amount0))), tokens: Number(formatEther(abs(l.args.amount1))), mcap, tx: l.transactionHash, wallet: txs[i].from };
+    });
+    drawChart(points);
+    drawTape(rows);
+  }
 
   async function refresh() {
     const [sqrt] = await pub.readContract({ address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [d.poolId] });
-    const tokensPerEth = (Number(sqrt) / 2 ** 96) ** 2;
-    const ethPrice = d.ethPriceUsdE6 / 1e6;
-    const priceUsd = ethPrice / tokensPerEth;
-    $("price").textContent = usd(priceUsd);
-    const supplyTokens = typeof d.supply === "string" ? Number(BigInt(d.supply) / 10n ** 18n) : d.supply / 1e18;
-    $("mcap").textContent = usd(priceUsd * supplyTokens);
+    tokensPerEth = tokensPerEthAt(sqrt);
+    $("mcap").textContent = usd(mcapAt(tokensPerEth));
+    $("price").textContent = usd(d.ethPriceUsdE6 / 1e6 / tokensPerEth);
     $("feeRate").textContent = `${d.fee / 10000}%`;
-    if (!account) return;
-    const [eth, tok] = await Promise.all([
-      pub.getBalance({ address: account }),
-      pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
-    ]);
-    $("ethBal").textContent = Number(formatEther(eth)).toFixed(5);
-    $("tokBal").textContent = Number(formatEther(tok)).toLocaleString("en-US", { maximumFractionDigits: 2 });
+    if (account) {
+      const [eth, tok] = await Promise.all([
+        pub.getBalance({ address: account }),
+        pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
+      ]);
+      balances = { eth, tok };
+    }
+    await loadHistory();
+    quote();
+  }
+
+  function quote() {
+    $("unit").textContent = side === "buy" ? "ETH" : "TICKS";
+    $("balance").textContent = account
+      ? side === "buy" ? `${fmt(Number(formatEther(balances.eth)), 5)} ETH` : `${fmt(Number(formatEther(balances.tok)), 0)} TICKS`
+      : "--";
+    const amount = Number($("amount").value) || 0;
+    const fee = d ? d.fee / 1e6 : 0;
+    if (!tokensPerEth || !amount) {
+      $("receive").textContent = "--";
+      $("feeAmount").textContent = "--";
+    } else if (side === "buy") {
+      $("receive").textContent = `≈ ${fmt(amount * (1 - fee) * tokensPerEth, 0)} TICKS`;
+      $("feeAmount").textContent = `${fmt(amount * fee, 6)} ETH`;
+    } else {
+      $("receive").textContent = `≈ ${fmt((amount * (1 - fee)) / tokensPerEth, 6)} ETH`;
+      $("feeAmount").textContent = `${fmt(amount * fee, 0)} TICKS`;
+    }
+    const button = $("submit");
+    button.classList.toggle("sell", side === "sell");
+    button.disabled = !account || !amount;
+    button.textContent = !account ? "Connect a wallet to trade" : side === "buy" ? "Buy TICKS" : "Sell TICKS";
   }
 
   async function send(label, request) {
     try {
       const hash = await wallet.writeContract({ account, chain, ...request });
-      log(`${label}: sent ${txLink(hash)}`);
+      log(`${label} sent ${txLink(hash)}`);
       const receipt = await pub.waitForTransactionReceipt({ hash });
-      log(`${label}: ${receipt.status === "success" ? "confirmed" : "failed"} ${txLink(hash)}`, receipt.status !== "success");
+      log(`${label} ${receipt.status === "success" ? "confirmed" : "failed"} ${txLink(hash)}`, receipt.status !== "success");
       await refresh();
-      return receipt;
+      return receipt.status === "success" ? receipt : null;
     } catch (error) {
       log(`${label}: ${error.shortMessage || error.message}`, true);
+      return null;
     }
   }
+
+  document.querySelectorAll(".seg button").forEach((b) => {
+    b.onclick = () => {
+      side = b.dataset.side;
+      document.querySelectorAll(".seg button").forEach((x) => {
+        x.classList.toggle("on", x === b);
+        x.setAttribute("aria-selected", String(x === b));
+      });
+      $("amount").value = side === "buy" ? "0.001" : "100000";
+      quote();
+    };
+  });
+  $("amount").oninput = quote;
+  $("max").onclick = () => {
+    if (!account) return;
+    const gasReserve = parseEther("0.0005");
+    $("amount").value = side === "buy"
+      ? formatEther(balances.eth > gasReserve ? balances.eth - gasReserve : 0n)
+      : formatEther(balances.tok);
+    quote();
+  };
 
   $("connect").onclick = async () => {
     if (!window.ethereum) return log("MetaMask is not installed", true);
@@ -161,7 +359,7 @@
     try {
       await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xb626" }] });
     } catch (error) {
-      if (error.code !== 4902) throw error;
+      if (error.code !== 4902) return log(error.message, true);
       await window.ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{ chainId: "0xb626", chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }],
@@ -169,25 +367,24 @@
     }
     account = addr;
     wallet = createWalletClient({ chain, transport: custom(window.ethereum) });
-    $("account").textContent = addr;
-    $("buy").disabled = $("sell").disabled = false;
+    $("connect").textContent = short(addr);
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
+    $("positionLabel").textContent = `#${d.positionId}`;
     await refresh();
   };
 
-  $("buy").onclick = async () => {
-    const value = parseEther($("buyAmount").value);
-    await send("Buy", {
-      address: d.router, abi: routerAbi, functionName: "swap", value,
-      args: [key(), { zeroForOne: true, amountSpecified: -value, sqrtPriceLimitX96: MIN_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
-    });
-  };
-
-  $("sell").onclick = async () => {
-    const amount = parseEther($("sellAmount").value);
+  $("submit").onclick = async () => {
+    const amount = parseEther($("amount").value);
+    if (side === "buy") {
+      await send("Buy", {
+        address: d.router, abi: routerAbi, functionName: "swap", value: amount,
+        args: [key(), { zeroForOne: true, amountSpecified: -amount, sqrtPriceLimitX96: MIN_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
+      });
+      return;
+    }
     const allowance = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "allowance", args: [account, d.router] });
-    if (allowance < amount) await send("Approve", { address: d.token, abi: erc20Abi, functionName: "approve", args: [d.router, maxUint256] });
+    if (allowance < amount && !(await send("Approve", { address: d.token, abi: erc20Abi, functionName: "approve", args: [d.router, maxUint256] }))) return;
     await send("Sell", {
       address: d.router, abi: routerAbi, functionName: "swap",
       args: [key(), { zeroForOne: false, amountSpecified: -amount, sqrtPriceLimitX96: MAX_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
@@ -195,32 +392,27 @@
   };
 
   $("collect").onclick = async () => {
-    const before = await Promise.all([
-      pub.getBalance({ address: account }),
-      pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] }),
-    ]);
-    const actions = "0x0111";
+    const tokBefore = balances.tok;
     const decrease = encodeAbiParameters(
       [{ type: "uint256" }, { type: "uint256" }, { type: "uint128" }, { type: "uint128" }, { type: "bytes" }],
       [BigInt(d.positionId), 0n, 0n, 0n, "0x"],
     );
     const take = encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "address" }], [d.currency0, d.currency1, account]);
-    const unlockData = encodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], [actions, [decrease, take]]);
+    const unlockData = encodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], ["0x0111", [decrease, take]]);
     const receipt = await send("Collect fees", {
       address: d.positionManager, abi: posmAbi, functionName: "modifyLiquidities",
       args: [unlockData, BigInt(Math.floor(Date.now() / 1000) + 1800)],
     });
-    if (!receipt) return;
-    const tok = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
-    log(`Fees collected: ${formatEther(tok - before[1])} TICKS, and the ETH fee is in the wallet balance (gas was paid from it too)`);
+    if (receipt) log(`Collected ${fmt(Number(formatEther(balances.tok - tokBefore)), 2)} TICKS in fees, the ETH fees are in your ETH balance`);
   };
 
   try {
     d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
     await refresh();
-    log(`Token ${d.token}, position #${d.positionId} owned by ${d.owner}`);
+    log(`Pool for ${short(d.token)} ready, position #${d.positionId} owned by ${short(d.owner)}`);
+    setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
-    log(`No testnet deployment found: ${error.message}`, true);
+    log(`No testnet deployment found yet: ${error.message}`, true);
   }
 </script>
 </body>
