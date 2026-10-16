@@ -1,0 +1,15 @@
+{
+  "currency0": "0x0000000000000000000000000000000000000000",
+  "currency1": "0x1FBeF9d5c84f4b8A656D4229C3Ed65e55999333a",
+  "ethPriceUsdE6": 2500000000,
+  "fee": 30000,
+  "owner": "0xF8A3eD355Ca2D0b4514f89e2a542F953868803DF",
+  "poolId": "0xfcdab56714b567d26644a17d732d4cd53aca23804a4a1a13606667c3ca732653",
+  "positionId": 565158,
+  "positionManager": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+  "router": "0xB281aBAdE0073EcDc9152ccCB96eea4CE5213733",
+  "startMarketCapUsd": 75000,
+  "supply": "1000000000000000000000000000",
+  "tickSpacing": 200,
+  "token": "0x1FBeF9d5c84f4b8A656D4229C3Ed65e55999333a"
+}
