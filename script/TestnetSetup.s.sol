@@ -56,6 +56,7 @@ contract TestnetSetup is Script {
         vm.serializeUint(o, "supply", supply);
         vm.serializeUint(o, "ethPriceUsdE6", ethPriceE6);
         vm.serializeUint(o, "startMarketCapUsd", startMarketCap);
+        vm.serializeUint(o, "launchSqrtPriceX96", p.sqrtPriceX96);
         string memory json = vm.serializeBytes32(o, "poolId", PoolId.unwrap(PoolIdLibrary.toId(p.key)));
         vm.writeJson(json, "deployments/testnet.json");
 

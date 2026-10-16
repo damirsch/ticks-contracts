@@ -46,6 +46,8 @@ OWNER=<your test account> forge script script/TestnetSetup.s.sol --rpc-url robin
 npm run ui
 ```
 
+The pool holds only TICKS at launch, so the launch price is a floor: a sell can only take the ETH that buyers have put in. The page caps a sell at that price, so selling more than the pool can pay leaves the rest in your wallet instead of pushing the price into the empty range below it.
+
 ## Launch
 
 ```sh

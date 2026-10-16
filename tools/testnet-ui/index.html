@@ -93,7 +93,7 @@
 
     .tape { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
-    th { text-align: left; color: var(--dim); font: 500 12px var(--sans); padding: 10px 16px; border-bottom: 1px solid var(--line); }
+    th { text-align: left; color: var(--dim); font: 500 12px var(--sans); padding: 10px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
     td { padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
     tr:last-child td { border-bottom: 0; }
     td.r, th.r { text-align: right; }
@@ -115,6 +115,7 @@
     .field .max { background: transparent; border: 1px solid var(--line-strong); color: var(--muted); padding: 6px 10px; font-size: 12px; }
     .line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
     .line b { color: var(--text); font: 500 13px var(--mono); }
+    .note { margin: 0; color: var(--muted); font-size: 13px; text-wrap: pretty; }
     .owner { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .owner p { margin: 0; color: var(--muted); font-size: 13px; }
     #log { padding: 12px 16px; font: 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
@@ -178,6 +179,7 @@
         </label>
         <div class="line"><span>You receive</span><b id="receive">--</b></div>
         <div class="line"><span>Pool fee</span><b id="feeAmount">--</b></div>
+        <p class="note hidden" id="note"></p>
         <button id="submit" class="primary" disabled>Connect a wallet to trade</button>
       </div>
     </section>
@@ -213,7 +215,7 @@
   const POOL_MANAGER = "0x8366a39CC670B4001A1121B8F6A443A643e40951";
   const STATE_VIEW = "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b";
   const MIN_SQRT = 4295128739n + 1n;
-  const MAX_SQRT = 1461446703485210103287273052203988822378723970342n - 1n;
+  const Q96 = 2n ** 96n;
 
   const routerAbi = parseAbi([
     "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,(bool takeClaims,bool settleUsingBurn) testSettings,bytes hookData) payable returns (int256)",
@@ -222,22 +224,41 @@
   const posmAbi = parseAbi([
     "function modifyLiquidities(bytes unlockData,uint256 deadline) payable",
     "function ownerOf(uint256 id) view returns (address)",
+    "function getPositionLiquidity(uint256 tokenId) view returns (uint128)",
   ]);
   const swapEvent = parseAbiItem("event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)");
-  const initEvent = parseAbiItem("event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)");
 
   const $ = (id) => document.getElementById(id);
   // ?rpc=http://127.0.0.1:8548 points the page at a local fork instead of the public testnet.
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
   const pub = createPublicClient({ chain, transport: http(rpc) });
-  let d, wallet, account, side = "buy", tokensPerEth = 0, balances = { eth: 0n, tok: 0n };
+  let d, wallet, account, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
 
   const fmt = (n, digits = 2) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
-  const usd = (n) => (n >= 1 ? `$${fmt(n, 0)}` : `$${n.toPrecision(3)}`);
+  const SUBSCRIPT = "₀₁₂₃₄₅₆₇₈₉";
+  function usd(n) {
+    if (!(n > 0)) return "--";
+    if (n >= 1) return `$${fmt(n, n < 100 ? 2 : 0)}`;
+    const text = n.toFixed(Math.min(100, 2 - Math.floor(Math.log10(n)))).replace(/\.?0+$/, "");
+    const zeros = text.match(/^0\.(0*)/)?.[1].length ?? 0;
+    return zeros < 5 ? `$${text}` : `$0.0${[...String(zeros)].map((c) => SUBSCRIPT[c]).join("")}${text.slice(2 + zeros)}`;
+  }
   const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-  const tokensPerEthAt = (sqrt) => (Number(sqrt) / 2 ** 96) ** 2;
+  const real = (sqrt) => Number(sqrt) / 2 ** 96;
+  const tradable = (sqrt) => (sqrt > floor ? floor : sqrt);
   const supplyTokens = () => (typeof d.supply === "string" ? Number(BigInt(d.supply) / 10n ** 18n) : d.supply / 1e18);
-  const mcapAt = (tpe) => (d.ethPriceUsdE6 / 1e6 / tpe) * supplyTokens();
+  const priceAt = (sqrt) => d.ethPriceUsdE6 / 1e6 / real(tradable(sqrt)) ** 2;
+  const mcapAt = (sqrt) => priceAt(sqrt) * supplyTokens();
+  const feeRate = () => d.fee / 1e6;
+  const sellRoom = () => (pool.liquidity * (floor - tradable(pool.sqrt)) / Q96) * 1_000_000n / (1_000_000n - BigInt(d.fee));
+  function buyQuote(eth) {
+    const s = real(tradable(pool.sqrt)), L = Number(pool.liquidity), net = eth * 1e18 * (1 - feeRate());
+    return (L * net * s * s) / (L + net * s) / 1e18;
+  }
+  function sellQuote(tokens) {
+    const s = real(tradable(pool.sqrt)), L = Number(pool.liquidity), net = tokens * 1e18 * (1 - feeRate());
+    return (net * L) / (s * (s * L + net)) / 1e18;
+  }
   const key = () => ({ currency0: d.currency0, currency1: d.currency1, fee: d.fee, tickSpacing: d.tickSpacing, hooks: "0x0000000000000000000000000000000000000000" });
   const txLink = (hash) => `<a href="${chain.blockExplorers.default.url}/tx/${hash}" target="_blank" rel="noreferrer">${hash.slice(0, 10)}…</a>`;
   const abs = (v) => (v < 0n ? -v : v);
@@ -283,14 +304,11 @@
     // RPCs cap a log query at 10M blocks, about a month of Robinhood Chain: plenty for a test pool.
     const latest = await pub.getBlockNumber();
     const fromBlock = latest > 9_990_000n ? latest - 9_990_000n : 0n;
-    const [inits, swaps] = await Promise.all([
-      pub.getLogs({ address: POOL_MANAGER, event: initEvent, args: { id: d.poolId }, fromBlock }),
-      pub.getLogs({ address: POOL_MANAGER, event: swapEvent, args: { id: d.poolId }, fromBlock }),
-    ]);
-    const points = inits.map((l) => ({ mcap: mcapAt(tokensPerEthAt(l.args.sqrtPriceX96)) }));
+    const swaps = await pub.getLogs({ address: POOL_MANAGER, event: swapEvent, args: { id: d.poolId }, fromBlock });
+    const points = [{ mcap: mcapAt(floor) }];
     const txs = await Promise.all(swaps.map((l) => pub.getTransaction({ hash: l.transactionHash })));
     const rows = swaps.map((l, i) => {
-      const mcap = mcapAt(tokensPerEthAt(l.args.sqrtPriceX96));
+      const mcap = mcapAt(l.args.sqrtPriceX96);
       points.push({ mcap });
       // The amounts are the swapper's: on a buy they pay ETH (negative) and receive TICKS.
       const buy = l.args.amount0 < 0n;
@@ -301,10 +319,13 @@
   }
 
   async function refresh() {
-    const [sqrt] = await pub.readContract({ address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [d.poolId] });
-    tokensPerEth = tokensPerEthAt(sqrt);
-    $("mcap").textContent = usd(mcapAt(tokensPerEth));
-    $("price").textContent = usd(d.ethPriceUsdE6 / 1e6 / tokensPerEth);
+    const [[sqrt], liquidity] = await Promise.all([
+      pub.readContract({ address: STATE_VIEW, abi: stateViewAbi, functionName: "getSlot0", args: [d.poolId] }),
+      pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "getPositionLiquidity", args: [BigInt(d.positionId)] }),
+    ]);
+    pool = { sqrt, liquidity };
+    $("mcap").textContent = usd(mcapAt(sqrt));
+    $("price").textContent = usd(priceAt(sqrt));
     $("feeRate").textContent = `${d.fee / 10000}%`;
     if (account) {
       const [eth, tok] = await Promise.all([
@@ -323,21 +344,28 @@
       ? side === "buy" ? `${fmt(Number(formatEther(balances.eth)), 5)} ETH` : `${fmt(Number(formatEther(balances.tok)), 0)} TICKS`
       : "--";
     const amount = Number($("amount").value) || 0;
-    const fee = d ? d.fee / 1e6 : 0;
-    if (!tokensPerEth || !amount) {
+    const room = pool && side === "sell" ? Number(formatEther(sellRoom())) : Infinity;
+    const blocked = room < 1;
+    const used = Math.min(amount, room);
+    if (!pool?.liquidity || !amount || blocked) {
       $("receive").textContent = "--";
       $("feeAmount").textContent = "--";
     } else if (side === "buy") {
-      $("receive").textContent = `≈ ${fmt(amount * (1 - fee) * tokensPerEth, 0)} TICKS`;
-      $("feeAmount").textContent = `${fmt(amount * fee, 6)} ETH`;
+      $("receive").textContent = `≈ ${fmt(buyQuote(amount), 0)} TICKS`;
+      $("feeAmount").textContent = `${fmt(amount * feeRate(), 6)} ETH`;
     } else {
-      $("receive").textContent = `≈ ${fmt((amount * (1 - fee)) / tokensPerEth, 6)} ETH`;
-      $("feeAmount").textContent = `${fmt(amount * fee, 0)} TICKS`;
+      $("receive").textContent = `≈ ${fmt(sellQuote(used), 6)} ETH`;
+      $("feeAmount").textContent = `${fmt(used * feeRate(), 0)} TICKS`;
     }
+    const note = blocked
+      ? "The price is at its launch level, so there is no ETH to sell into until someone buys"
+      : amount > room ? `The pool only has ETH for ${fmt(room, 0)} TICKS, the rest stays with you` : "";
+    $("note").textContent = note;
+    $("note").classList.toggle("hidden", !note);
     const button = $("submit");
     button.classList.toggle("sell", side === "sell");
-    button.disabled = !account || !amount;
-    button.textContent = !account ? "Connect a wallet to trade" : side === "buy" ? "Buy TICKS" : "Sell TICKS";
+    button.disabled = !account || !amount || blocked;
+    button.textContent = !account ? "Connect a wallet to trade" : side === "buy" ? "Buy TICKS" : blocked ? "Nothing to sell into yet" : "Sell TICKS";
   }
 
   async function send(label, request) {
@@ -369,9 +397,10 @@
   $("max").onclick = () => {
     if (!account) return;
     const gasReserve = parseEther("0.0005");
+    const room = pool ? sellRoom() : balances.tok;
     $("amount").value = side === "buy"
       ? formatEther(balances.eth > gasReserve ? balances.eth - gasReserve : 0n)
-      : formatEther(balances.tok);
+      : formatEther(balances.tok < room ? balances.tok : room);
     quote();
   };
 
@@ -443,7 +472,7 @@
     if (allowance < amount && !(await send("Approve", { address: d.token, abi: erc20Abi, functionName: "approve", args: [d.router, maxUint256] }))) return;
     await send("Sell", {
       address: d.router, abi: routerAbi, functionName: "swap",
-      args: [key(), { zeroForOne: false, amountSpecified: -amount, sqrtPriceLimitX96: MAX_SQRT }, { takeClaims: false, settleUsingBurn: false }, "0x"],
+      args: [key(), { zeroForOne: false, amountSpecified: -amount, sqrtPriceLimitX96: floor }, { takeClaims: false, settleUsingBurn: false }, "0x"],
     });
   };
 
@@ -464,6 +493,7 @@
 
   try {
     d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
+    floor = BigInt(d.launchSqrtPriceX96);
     await refresh();
     log(`Pool for ${short(d.token)} ready, position #${d.positionId} owned by ${short(d.owner)}`);
     setInterval(() => refresh().catch(() => {}), 15000);
