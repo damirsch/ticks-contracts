@@ -101,3 +101,99 @@ contract UncxLockForkTest is LaunchFork {
         router.swap{value: amount}(p.key, _exactIn(true, amount), _settings(), "");
     }
 }
+
+interface ITitanLockerManager {
+    function createPositionLock(address positionManager, uint256 tokenId, uint40 unlockTime) external payable;
+    function ethFee() external view returns (uint256);
+    function feeReceiver() external view returns (address);
+    function tokenLockerCount() external view returns (uint40);
+    function getTokenLockAddress(uint40 id) external view returns (address);
+}
+
+interface ITitanLock {
+    function collectFees() external returns (uint256 amount0, uint256 amount1);
+    function withdraw() external;
+    function withdrawNft(address collection, uint256 tokenId) external;
+    function extendLock(uint40 newUnlockTime) external;
+    function transferOwnership(address newOwner) external;
+    function owner() external view returns (address);
+}
+
+contract TitanLockForkTest is LaunchFork {
+    ITitanLockerManager constant TITAN = ITitanLockerManager(0x102a70bDA2C833b3483A2eE55C14c7ea0fb7A01B);
+    IPositionManager constant POSM = IPositionManager(LaunchPlan.POSITION_MANAGER);
+
+    function test_titanLock_costs_rules_and_fees() public {
+        TicksToken token = _deployToken(bytes32(0));
+        (LaunchPlan.Plan memory p, uint256 tokenId) = _launch(token, address(0), 18, ETH_PRICE_E6);
+        uint128 liquidityBefore = POSM.getPositionLiquidity(tokenId);
+        address feeTo = TITAN.feeReceiver();
+        uint256 feeToBefore = feeTo.balance;
+
+        vm.deal(owner, 1 ether);
+        vm.startPrank(owner);
+        IERC721(address(POSM)).approve(address(TITAN), tokenId);
+        uint40 unlockAt = uint40(block.timestamp + 365 days);
+        uint40 id = TITAN.tokenLockerCount();
+        TITAN.createPositionLock{value: TITAN.ethFee()}(address(POSM), tokenId, unlockAt);
+        vm.stopPrank();
+        ITitanLock lock = ITitanLock(TITAN.getTokenLockAddress(id));
+
+        assertEq(IERC721(address(POSM)).ownerOf(tokenId), address(lock));
+        assertEq(lock.owner(), owner);
+        assertEq(POSM.getPositionLiquidity(tokenId), liquidityBefore);
+        assertEq(feeTo.balance - feeToBefore, TITAN.ethFee());
+        assertEq(token.balanceOf(feeTo), 0);
+        console2.log("titan lock fee (wei), nothing taken from the position", TITAN.ethFee());
+
+        _buy(p, 0.1 ether);
+        uint256 ownerBefore = owner.balance;
+        vm.prank(owner);
+        lock.collectFees();
+        assertApproxEqRel(owner.balance - ownerBefore, 0.003 ether, 0.01e18);
+        console2.log("fees from a 0.1 ETH buy, owner got (wei)", owner.balance - ownerBefore);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        lock.withdraw();
+
+        vm.prank(owner);
+        vm.expectRevert();
+        lock.withdrawNft(address(POSM), tokenId);
+
+        vm.prank(buyer);
+        vm.expectRevert();
+        lock.collectFees();
+
+        vm.prank(owner);
+        vm.expectRevert();
+        lock.extendLock(unlockAt - 1 days);
+
+        vm.prank(owner);
+        lock.extendLock(unlockAt + 30 days);
+
+        address next = makeAddr("next owner");
+        vm.prank(owner);
+        lock.transferOwnership(next);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        lock.collectFees();
+
+        _buy(p, 0.1 ether);
+        vm.prank(next);
+        lock.collectFees();
+        assertApproxEqRel(next.balance, 0.003 ether, 0.02e18);
+
+        vm.warp(unlockAt + 31 days);
+        vm.prank(next);
+        lock.withdraw();
+        assertEq(IERC721(address(POSM)).ownerOf(tokenId), next);
+    }
+
+    function _buy(LaunchPlan.Plan memory p, uint256 amount) internal {
+        vm.deal(buyer, amount);
+        vm.prank(buyer);
+        router.swap{value: amount}(p.key, _exactIn(true, amount), _settings(), "");
+    }
+}
