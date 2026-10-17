@@ -61,10 +61,10 @@ The pool holds only TICKS at launch, so the launch price is a floor: a sell can 
 forge script script/Launch.s.sol --rpc-url robinhood --broadcast --account deployer
 node tools/find-position.mjs
 
-# 2. Right away, before the address goes public, the owner locks the position. Titan Locker
-#    (createPositionLock on 0x102a70bDA2C833b3483A2eE55C14c7ea0fb7A01B) takes 0.025 ETH and nothing else.
-#    UNCX (app.uncx.network, Manage, V4 Liquidity) takes 0.1 ETH and 1% of the position and keeps 4% of
-#    the fees collected later. test/Lock.t.sol runs both real lockers on a fork to show every rule
+# 2. Right away, before the first trade and before the address goes public, the owner locks the position
+#    at app.uncx.network (Manage, V4 Liquidity). UNCX takes 0.1 ETH and 1% of the position, which is only
+#    TICKS before the first trade, and keeps 4% of the fees collected later. test/Lock.t.sol runs the real
+#    locker on a fork to show every rule
 
 # 3. Distribute the rest of the supply (check first, then add --send)
 node tools/send-tokens.mjs --file allocation.csv --token <TOKEN>
