@@ -38,13 +38,18 @@ Robinhood Chain testnet has the same Uniswap v4 contracts as mainnet, but not th
 ```sh
 OWNER=<your test account> forge script script/TestnetSetup.s.sol --rpc-url robinhood_testnet \
   --broadcast --private-key $TESTNET_DEPLOYER_KEY
+node tools/find-position.mjs TestnetSetup 46630 deployments/testnet.json
 ```
+
+The second command records the position NFT the broadcast actually minted: a script only knows the id it simulated, and on a busy chain someone else's mint can take that id first.
 
 3. Start the page and open http://127.0.0.1:8091/tools/testnet-ui/ to buy, sell and collect the pool fee with MetaMask:
 
 ```sh
 npm run ui
 ```
+
+To share it, `npm run site` publishes only the page and `deployments/testnet.json` to Vercel (the project is called ticks-testnet).
 
 The pool holds only TICKS at launch, so the launch price is a floor: a sell can only take the ETH that buyers have put in. The page caps a sell at that price, so selling more than the pool can pay leaves the rest in your wallet instead of pushing the price into the empty range below it.
 
@@ -54,6 +59,7 @@ The pool holds only TICKS at launch, so the launch price is a floor: a sell can 
 # 1. Deploy the token and open the pool (fill the launch section of .env first). The key lives in
 #    Foundry's encrypted keystore so it never lands in the shell history: cast wallet import deployer --interactive
 forge script script/Launch.s.sol --rpc-url robinhood --broadcast --account deployer
+node tools/find-position.mjs
 
 # 2. Distribute the rest of the supply (check first, then add --send)
 node tools/send-tokens.mjs --file allocation.csv --token <TOKEN>

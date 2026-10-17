@@ -38,7 +38,7 @@ contract Launch is Script {
         vm.stopBroadcast();
 
         console2.log("token", token);
-        console2.log("position NFT", tokenId);
+        console2.log("position NFT as simulated, confirm with tools/find-position.mjs", tokenId);
         console2.log("pool id");
         console2.logBytes32(PoolId.unwrap(PoolIdLibrary.toId(p.key)));
         console2.log("tick lower", int256(p.tickLower));

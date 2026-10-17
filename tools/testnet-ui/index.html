@@ -116,6 +116,7 @@
     .line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
     .line b { color: var(--text); font: 500 13px var(--mono); }
     .note { margin: 0; color: var(--muted); font-size: 13px; text-wrap: pretty; }
+    .note a { color: var(--lime); }
     .owner { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .owner p { margin: 0; color: var(--muted); font-size: 13px; }
     #log { padding: 12px 16px; font: 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
@@ -181,6 +182,8 @@
         <div class="line"><span>Pool fee</span><b id="feeAmount">--</b></div>
         <p class="note hidden" id="note"></p>
         <button id="submit" class="primary" disabled>Connect a wallet to trade</button>
+        <p class="note hidden" id="faucetNote">You need a little test ETH first, it's free at <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">faucet.testnet.chain.robinhood.com</a></p>
+        <button id="watch" class="ghost hidden" type="button">Add TICKS to your wallet</button>
       </div>
     </section>
 
@@ -232,7 +235,7 @@
   // ?rpc=http://127.0.0.1:8548 points the page at a local fork instead of the public testnet.
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
   const pub = createPublicClient({ chain, transport: http(rpc) });
-  let d, wallet, account, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
+  let d, wallet, account, provider, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
 
   const fmt = (n, digits = 2) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
   const SUBSCRIPT = "₀₁₂₃₄₅₆₇₈₉";
@@ -362,6 +365,7 @@
       : amount > room ? `The pool only has ETH for ${fmt(room, 0)} TICKS, the rest stays with you` : "";
     $("note").textContent = note;
     $("note").classList.toggle("hidden", !note);
+    $("faucetNote").classList.toggle("hidden", !account || balances.eth >= parseEther("0.0005"));
     const button = $("submit");
     button.classList.toggle("sell", side === "sell");
     button.disabled = !account || !amount || blocked;
@@ -438,7 +442,8 @@
     $("connect").setAttribute("aria-expanded", String(!menu.classList.contains("hidden")));
   };
 
-  async function connectWith(provider) {
+  async function connectWith(chosen) {
+    provider = chosen;
     let addr;
     try {
       [addr] = await provider.request({ method: "eth_requestAccounts" });
@@ -456,8 +461,19 @@
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
+    $("watch").classList.remove("hidden");
     await refresh();
   }
+
+  $("watch").onclick = async () => {
+    try {
+      const symbol = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "symbol" });
+      const added = await provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: d.token, symbol, decimals: 18 } } });
+      if (added) log(`${symbol} added to your wallet`);
+    } catch (error) {
+      log(error.shortMessage || error.message, true);
+    }
+  };
 
   $("submit").onclick = async () => {
     const amount = parseEther($("amount").value);
@@ -495,7 +511,8 @@
     d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
     floor = BigInt(d.launchSqrtPriceX96);
     await refresh();
-    log(`Pool for ${short(d.token)} ready, position #${d.positionId} owned by ${short(d.owner)}`);
+    const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
+    log(`Pool for ${short(d.token)} ready, position #${d.positionId} owned by ${short(owner)}`);
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     log(`No testnet deployment found yet: ${error.message}`, true);

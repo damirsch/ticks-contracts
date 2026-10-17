@@ -62,6 +62,6 @@ contract TestnetSetup is Script {
 
         console2.log("token", address(token));
         console2.log("router", address(router));
-        console2.log("position NFT", tokenId);
+        console2.log("position NFT as simulated, confirm with tools/find-position.mjs", tokenId);
     }
 }
