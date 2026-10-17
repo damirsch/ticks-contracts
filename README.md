@@ -61,10 +61,14 @@ The pool holds only TICKS at launch, so the launch price is a floor: a sell can 
 forge script script/Launch.s.sol --rpc-url robinhood --broadcast --account deployer
 node tools/find-position.mjs
 
-# 2. Distribute the rest of the supply (check first, then add --send)
+# 2. Right away, before the address goes public, the owner locks the position at app.uncx.network
+#    (Manage, V4 Liquidity). UNCX takes 0.1 ETH and 1% of the position, keeps 4% of the fees collected
+#    later, and test/Lock.t.sol runs the real locker on a fork to show every rule
+
+# 3. Distribute the rest of the supply (check first, then add --send)
 node tools/send-tokens.mjs --file allocation.csv --token <TOKEN>
 
-# 3. Each season, pay the rewards from the admin's PAYOUTS export, from a payout wallet that holds only
+# 4. Each season, pay the rewards from the admin's PAYOUTS export, from a payout wallet that holds only
 #    this season's TICKS (the rest of the rewards stay in the cold wallet)
 node tools/send-tokens.mjs --file season-1-payouts.csv --token <TOKEN> \
   --address-column wallet_address --amount-column total_ticks

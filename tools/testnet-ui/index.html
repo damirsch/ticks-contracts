@@ -201,6 +201,7 @@
     .owner p { margin: 0; color: var(--muted); font-size: 14px; }
     #log { padding: 12px 16px; font: 400 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
     #log .err { color: var(--short); }
+    #log .addr { white-space: nowrap; }
 
     @media (max-width: 880px) {
       main { grid-template-columns: minmax(0, 1fr); padding: 16px; }
@@ -641,7 +642,7 @@
     $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
-    log(`Pool ready, position #${d.positionId} owned by ${short(owner)}`);
+    log(`Pool ready, position #${d.positionId} owned by <span class="addr">${short(owner)}</span>`);
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     log(`No testnet deployment found yet: ${error.message}`, true);
