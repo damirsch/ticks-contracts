@@ -5,7 +5,7 @@
   "scripts": {
     "send": "node tools/send-tokens.mjs",
     "ui": "python3 -m http.server 8091 --bind 127.0.0.1",
-    "site": "mkdir -p .deploy/ticks-testnet/deployments && cp tools/testnet-ui/index.html .deploy/ticks-testnet/index.html && cp deployments/testnet.json .deploy/ticks-testnet/deployments/ && cd .deploy/ticks-testnet && vercel deploy --prod --yes"
+    "site": "rm -rf .deploy/ticks-testnet/assets && mkdir -p .deploy/ticks-testnet/deployments && cp tools/testnet-ui/index.html .deploy/ticks-testnet/index.html && cp -R tools/testnet-ui/assets .deploy/ticks-testnet/assets && cp deployments/testnet.json .deploy/ticks-testnet/deployments/ && cd .deploy/ticks-testnet && vercel deploy --prod --yes"
   },
   "dependencies": {
     "viem": "^2.57.7"

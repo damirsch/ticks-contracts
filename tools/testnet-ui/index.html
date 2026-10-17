@@ -3,144 +3,231 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TICKS testnet terminal</title>
+  <title>TICKS Testnet</title>
+  <link rel="icon" href="assets/ticks-coin.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" />
+  <script>
+    try { const t = localStorage.getItem("ticks-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <style>
     :root {
-      --bg: #08090c;
-      --panel: #0f1116;
-      --line: #20242d;
-      --line-strong: #2c313c;
-      --text: #e8eaef;
-      --muted: #8a909e;
-      --dim: #5b616e;
-      --lime: #b7f34a;
-      --lime-ink: #10140a;
-      --red: #ff6f6f;
-      --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --surface: #ffffff;
+      --raised: #ffffff;
+      --input: #f4f4f6;
+      --hover: #eeeff3;
+      --fg: #09090b;
+      --muted: #5f6170;
+      --subtle: #8b8d99;
+      --inverted: #ffffff;
+      --border: #e4e4e7;
+      --border-strong: #d4d4d8;
+      --accent: #a3e635;
+      --accent-fg: #121218;
+      --accent-ink: #4d7c0f;
+      --long: #047857;
+      --long-soft: #e7f6ef;
+      --short: #dc2626;
+      --short-soft: #fdecec;
+      --warn: #b45309;
+      --warn-soft: #fdf3e7;
+      --shadow: 0 12px 32px rgb(9 10 16 / 0.12);
+      --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+      --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius-control: 6px;
+      --radius-panel: 10px;
+      color-scheme: light;
     }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --surface: #090a10; --raised: #161822; --input: #1c1f2b; --hover: #252836;
+        --fg: #f8f9fc; --muted: #a9aec2; --subtle: #6e7491; --inverted: #090a10;
+        --border: #252836; --border-strong: #3b3f52; --accent-ink: #a3e635;
+        --long: #34d399; --long-soft: #0b2a20; --short: #f87171; --short-soft: #2e1416;
+        --warn: #fbbf24; --warn-soft: #2a1f08; --shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --surface: #090a10; --raised: #161822; --input: #1c1f2b; --hover: #252836;
+      --fg: #f8f9fc; --muted: #a9aec2; --subtle: #6e7491; --inverted: #090a10;
+      --border: #252836; --border-strong: #3b3f52; --accent-ink: #a3e635;
+      --long: #34d399; --long-soft: #0b2a20; --short: #f87171; --short-soft: #2e1416;
+      --warn: #fbbf24; --warn-soft: #2a1f08; --shadow: 0 12px 32px rgb(0 0 0 / 0.5);
+      color-scheme: dark;
+    }
+
     * { box-sizing: border-box; }
     html, body { margin: 0; }
     body {
       min-height: 100vh;
-      color: var(--text);
-      font: 14px/1.5 var(--sans);
-      background-color: var(--bg);
-    }
-    /* A faint grid that fades out toward the bottom, behind everything. */
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      pointer-events: none;
+      color: var(--fg);
+      font: 400 15px/1.5 var(--sans);
+      background-color: var(--surface);
       background-image:
-        linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
-      background-size: 40px 40px;
-      -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
-      mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 75%);
+        linear-gradient(color-mix(in oklab, var(--fg) 3%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in oklab, var(--fg) 3%, transparent) 1px, transparent 1px);
+      background-size: 20px 20px;
+      -webkit-font-smoothing: antialiased;
     }
+    button { font: inherit; cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
+    a { color: var(--accent-ink); }
+    img { display: block; }
+    .hidden { display: none !important; }
+    .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    :focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border-radius: var(--radius-control); border: 1px solid transparent; white-space: nowrap;
+      font: 600 14px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.025em;
+      height: 36px; padding: 0 12px; transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
+    }
+    .btn:disabled { opacity: .4; }
+    .btn.primary { background: var(--accent); color: var(--accent-fg); }
+    .btn.primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 90%, transparent); }
+    .btn.long { background: var(--long); color: var(--inverted); }
+    .btn.short { background: var(--short); color: var(--inverted); }
+    .btn.long:hover:not(:disabled), .btn.short:hover:not(:disabled) { opacity: .9; }
+    .btn.outline { background: transparent; border-color: var(--border-strong); color: var(--fg); }
+    .btn.outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+    .btn.subtle { background: transparent; border-color: var(--border); color: var(--fg); }
+    .btn.subtle:hover:not(:disabled) { border-color: var(--border-strong); }
+    .btn.lg { height: 52px; font-size: 16px; width: 100%; }
+    .btn.address { text-transform: none; letter-spacing: 0; font: 500 13px/1 var(--mono); }
+    .btn img { width: 16px; height: 16px; }
+    .icon-btn { width: 36px; height: 36px; display: inline-grid; place-items: center; background: transparent; border: 0; color: var(--muted); border-radius: var(--radius-control); }
+    .icon-btn:hover { color: var(--fg); }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: var(--radius-control); font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    .badge.neutral { border: 1px solid var(--border); color: var(--muted); }
+    .badge.long { background: var(--long-soft); color: var(--long); }
+    .badge.short { background: var(--short-soft); color: var(--short); }
+
     header {
-      position: sticky; top: 0; z-index: 3;
-      border-bottom: 1px solid var(--line-strong);
-      background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+      position: sticky; top: 0; z-index: 30;
+      background: color-mix(in oklab, var(--surface) 95%, transparent); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
     }
-    .bar { max-width: 1120px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .bar { max-width: 1120px; margin: 0 auto; padding: 0 20px; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 14px; color: var(--fg); text-decoration: none; }
+    .brand svg { width: 16px; height: 25px; }
+    .head-right { display: flex; align-items: center; gap: 12px; }
+    .live { display: inline-flex; align-items: center; gap: 8px; font: 400 11px/1 var(--mono); color: var(--subtle); text-transform: uppercase; letter-spacing: 0.04em; }
+    .live i { width: 6px; height: 6px; background: var(--long); }
+    @media (max-width: 560px) { .live { display: none; } }
     .wallet { position: relative; }
     .menu {
-      position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; padding: 6px;
-      background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px;
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 2px;
+      position: absolute; right: 0; top: calc(100% + 8px); min-width: 230px; padding: 6px;
+      background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-panel);
+      box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 2px;
     }
-    .menu p { margin: 4px 8px 6px; color: var(--dim); font-size: 12px; }
-    .menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; background: transparent; border: 0; color: var(--text); text-align: left; font-weight: 500; }
-    .menu button:hover { background: var(--bg); }
+    .menu p { margin: 6px 10px 8px; color: var(--subtle); font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
+    .menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 10px; background: transparent; border: 0; border-radius: var(--radius-control); color: var(--fg); font-weight: 500; text-align: left; }
+    .menu button:hover { background: var(--hover); }
     .menu img { width: 22px; height: 22px; border-radius: 6px; }
-    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 14px; }
-    .brand .mark { width: 10px; height: 10px; background: var(--lime); transform: rotate(45deg); }
-    .brand .slash { color: var(--lime); }
-    .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 10px; }
-    .head-right { display: flex; align-items: center; gap: 12px; }
-    .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
-    .live i { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 10px var(--lime); }
-    @media (max-width: 560px) { .live { display: none; } }
-    button { font: 600 14px var(--sans); cursor: pointer; border-radius: 8px; transition: background .15s, border-color .15s, color .15s; }
-    .ghost { background: transparent; color: var(--text); border: 1px solid var(--line-strong); padding: 8px 14px; white-space: nowrap; }
-    .ghost:hover { border-color: var(--muted); }
-    .primary { width: 100%; padding: 14px; border: 0; background: var(--lime); color: var(--lime-ink); font-size: 15px; }
-    .primary.sell { background: var(--red); color: #1a0606; }
-    .primary:disabled { opacity: .45; cursor: default; }
 
     main { max-width: 1120px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
-    @media (max-width: 880px) { main { grid-template-columns: 1fr; padding: 16px; } }
-    .panel { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; }
-    .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-    .panel-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
-    .panel-head span { color: var(--dim); font-size: 13px; }
     .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .panel { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); min-height: 48px; }
+    .panel-head h2 { margin: 0; font: 700 16px/1.12 var(--sans); text-transform: uppercase; }
+    .panel-head span { color: var(--subtle); font: 400 12px/1 var(--mono); }
 
-    .stats { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; border-bottom: 1px solid var(--line); }
-    @media (max-width: 560px) { .stats { grid-template-columns: 1fr 1fr; } }
-    .stat { padding: 16px; border-right: 1px solid var(--line); }
+    .token { display: flex; align-items: center; gap: 12px; }
+    .token img { width: 36px; height: 36px; }
+    .token b { display: block; font: 700 18px/1.12 var(--sans); text-transform: uppercase; }
+    .token a { color: var(--subtle); font: 400 12px/1.4 var(--mono); text-decoration: none; }
+    .token a:hover { color: var(--fg); }
+    .stats { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; border-bottom: 1px solid var(--border); }
+    .stat { padding: 14px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
     .stat:last-child { border-right: 0; }
-    .stat b { display: block; font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
-    .stat.big b { font-size: 28px; color: var(--lime); }
-    .stat span { color: var(--muted); font-size: 13px; }
-    .chart { padding: 12px 16px 16px; }
-    .chart svg { width: 100%; height: 200px; display: block; }
-    .empty { color: var(--dim); font-size: 13px; padding: 24px 16px; text-align: center; }
+    .stat .k { color: var(--subtle); font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat .v { font: 600 20px/1.12 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .stat.big .v { font-size: 26px; }
+    .stat .delta { font: 400 12px/1 var(--mono); color: var(--subtle); }
+    .stat .delta.up { color: var(--long); }
+    @media (max-width: 560px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+    }
+    .chart { position: relative; padding: 16px; }
+    .chart svg { width: 100%; height: 200px; display: block; overflow: visible; }
+    .chart .line { fill: none; stroke: var(--long); stroke-width: 2; vector-effect: non-scaling-stroke; }
+    .chart .floor { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+    .chart .floor-label { position: absolute; left: 16px; bottom: 20px; font: 400 11px/1 var(--mono); color: var(--subtle); text-transform: uppercase; letter-spacing: 0.04em; background: var(--raised); padding-right: 6px; }
+    .chart-empty { height: 200px; display: grid; place-items: center; color: var(--subtle); font-size: 14px; }
 
     .tape { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
-    th { text-align: left; color: var(--dim); font: 500 12px var(--sans); padding: 10px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-    td { padding: 9px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    table { width: 100%; border-collapse: collapse; font: 400 13px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+    th { text-align: left; color: var(--subtle); font: 400 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 10px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
     tr:last-child td { border-bottom: 0; }
+    tbody tr:hover td { background: var(--hover); }
     td.r, th.r { text-align: right; }
-    .up { color: var(--lime); }
-    .down { color: var(--red); }
     td a { color: var(--muted); text-decoration: none; }
-    td a:hover { color: var(--text); }
+    td a:hover { color: var(--fg); }
+    .empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px 32px; text-align: center; }
+    .empty img { width: auto; height: 96px; margin-bottom: 4px; }
+    .empty b { font: 700 18px/1.12 var(--sans); text-transform: uppercase; }
+    .empty span { color: var(--muted); font-size: 14px; }
 
-    .ticket { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-    .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; padding: 4px; }
-    .seg button { background: transparent; border: 0; color: var(--muted); padding: 8px; }
-    .seg button.on { background: var(--panel); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
-    .seg button.on[data-side="buy"] { color: var(--lime); }
-    .seg button.on[data-side="sell"] { color: var(--red); }
-    .field { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; padding: 4px 4px 4px 14px; }
-    .field:focus-within { border-color: var(--muted); }
-    .field input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); font: 600 20px var(--mono); padding: 10px 0; }
-    .field .unit { color: var(--muted); font-family: var(--mono); }
-    .field .max { background: transparent; border: 1px solid var(--line-strong); color: var(--muted); padding: 6px 10px; font-size: 12px; }
-    .line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
-    .line b { color: var(--text); font: 500 13px var(--mono); }
+    .ticket { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .seg { display: grid; grid-template-columns: 1fr 1fr; height: 44px; border: 1px solid var(--border); border-radius: var(--radius-control); overflow: hidden; }
+    .seg button { border: 0; border-left: 1px solid var(--border); background: transparent; color: var(--subtle); font: 600 14px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.025em; transition: background-color .15s, color .15s; }
+    .seg button:first-child { border-left: 0; }
+    .seg button:hover { color: var(--fg); }
+    .seg button[aria-pressed="true"][data-side="buy"] { background: var(--long); color: var(--inverted); }
+    .seg button[aria-pressed="true"][data-side="sell"] { background: var(--short); color: var(--inverted); }
+    .field-label { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+    .field-label button { background: none; border: 0; padding: 0; color: var(--subtle); font: 400 12px/1 var(--mono); }
+    .field-label button:hover { color: var(--fg); }
+    .field { display: flex; align-items: center; height: 52px; background: var(--input); border: 1px solid var(--border); border-radius: var(--radius-control); transition: border-color .15s; }
+    .field:focus-within { border-color: var(--accent); }
+    .field input { flex: 1; min-width: 0; height: 100%; padding: 0 12px; background: transparent; border: 0; outline: 0; color: var(--fg); font: 500 18px/1 var(--mono); font-variant-numeric: tabular-nums; }
+    .unit { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; color: var(--subtle); font: 400 13px/1 var(--mono); }
+    .unit img { width: 18px; height: 18px; }
+    .lines { display: flex; flex-direction: column; gap: 8px; }
+    .line { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+    .line b { color: var(--fg); font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
     .note { margin: 0; color: var(--muted); font-size: 13px; text-wrap: pretty; }
-    .note a { color: var(--lime); }
-    .owner { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-    .owner p { margin: 0; color: var(--muted); font-size: 13px; }
-    #log { padding: 12px 16px; font: 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
-    #log .err { color: var(--red); }
-    #log a { color: var(--lime); }
-    .hidden { display: none !important; }
+    .note.warn { color: var(--warn); }
 
-    /* On a phone the ticket comes right after the chart, before the trade list. */
+    .owner { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .owner p { margin: 0; color: var(--muted); font-size: 14px; }
+    #log { padding: 12px 16px; font: 400 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
+    #log .err { color: var(--short); }
+
     @media (max-width: 880px) {
+      main { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+      .bar { padding: 0 16px; }
       .col { display: contents; }
       #market { order: 1; } #ticket { order: 2; } #ownerPanel { order: 3; } #trades { order: 4; } #activity { order: 5; }
     }
-    @media (max-width: 880px) { .bar { padding: 12px 16px; } }
-    @media (max-width: 560px) { .brand .wide { display: none; } }
   </style>
 </head>
 <body>
 <header>
   <div class="bar">
-    <div class="brand"><span class="mark"></span>TICKS <span class="wide"><span class="slash">//</span> terminal</span> <span class="tag">testnet</span></div>
+    <a class="brand" href="./" aria-label="TICKS testnet">
+      <svg viewBox="0 0 116 184" overflow="visible" aria-hidden="true">
+        <defs><path id="d" d="M 0 -24 C 3 -24 5 -22 8 -19 L 19 -8 C 22 -5 24 -3 24 0 C 24 3 22 5 19 8 L 8 19 C 5 22 3 24 0 24 C -3 24 -5 22 -8 19 L -19 8 C -22 5 -24 3 -24 0 C -24 -3 -22 -5 -19 -8 L -8 -19 C -5 -22 -3 -24 0 -24 Z" fill="currentColor" /></defs>
+        <use href="#d" x="58" y="24" /><use href="#d" x="24" y="58" /><use href="#d" x="92" y="58" /><use href="#d" x="58" y="92" />
+        <use href="#d" x="24" y="126" /><use href="#d" x="92" y="126" /><use href="#d" x="58" y="160" />
+      </svg>
+      <span class="badge neutral">Testnet</span>
+    </a>
     <div class="head-right">
-      <span class="live"><i></i>Robinhood Chain</span>
+      <span class="live"><i></i>Robinhood testnet</span>
+      <button id="theme" class="icon-btn" type="button" aria-label="Switch theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" /></svg>
+      </button>
       <div class="wallet">
-        <button id="connect" class="ghost" aria-haspopup="menu" aria-expanded="false">Connect wallet</button>
+        <button id="connect" class="btn primary" type="button" aria-haspopup="menu" aria-expanded="false">Connect wallet</button>
         <div id="walletMenu" class="menu hidden" role="menu"><p>Choose a wallet</p></div>
       </div>
     </div>
@@ -150,40 +237,51 @@
 <main>
   <div class="col">
     <section class="panel" id="market">
-      <div class="stats">
-        <div class="stat big"><b id="mcap">--</b><span>Market cap</span></div>
-        <div class="stat"><b id="price">--</b><span>Price</span></div>
-        <div class="stat"><b id="feeRate">--</b><span>Pool fee</span></div>
-        <div class="stat"><b id="tradeCount">--</b><span>Trades</span></div>
+      <div class="panel-head">
+        <div class="token">
+          <img src="assets/ticks-coin.png" alt="" width="36" height="36" />
+          <div><b>TICKS</b><a id="tokenLink" target="_blank" rel="noreferrer">--</a></div>
+        </div>
+        <span id="poolFeeTag">--</span>
       </div>
-      <div class="chart" id="chart"><div class="empty">The chart fills in as people trade</div></div>
+      <div class="stats">
+        <div class="stat big"><span class="k">Market cap</span><span class="v" id="mcap">--</span><span class="delta" id="delta">--</span></div>
+        <div class="stat"><span class="k">Price</span><span class="v" id="price">--</span></div>
+        <div class="stat"><span class="k">Launch</span><span class="v" id="launch">--</span></div>
+        <div class="stat"><span class="k">Trades</span><span class="v" id="tradeCount">--</span></div>
+      </div>
+      <div class="chart" id="chart"><div class="chart-empty">The chart fills in as people trade</div></div>
     </section>
 
     <section class="panel" id="trades">
-      <div class="panel-head"><h2>Trades</h2><span>Every swap in the pool, newest first</span></div>
-      <div class="tape" id="tape"><div class="empty">No trades yet</div></div>
+      <div class="panel-head"><h2>Trades</h2><span>Newest first</span></div>
+      <div class="tape" id="tape"></div>
     </section>
   </div>
 
   <div class="col">
     <section class="panel" id="ticket">
+      <div class="panel-head"><h2>Trade TICKS</h2></div>
       <div class="ticket">
-        <div class="seg" role="tablist" aria-label="Side">
-          <button data-side="buy" class="on" role="tab" aria-selected="true">Buy</button>
-          <button data-side="sell" role="tab" aria-selected="false">Sell</button>
+        <div class="seg" role="group" aria-label="Side">
+          <button type="button" data-side="buy" aria-pressed="true">Buy</button>
+          <button type="button" data-side="sell" aria-pressed="false">Sell</button>
         </div>
-        <div class="line"><span>Balance</span><b id="balance">--</b></div>
-        <label class="field">
-          <input id="amount" inputmode="decimal" value="0.001" aria-label="Amount" />
-          <span class="unit" id="unit">ETH</span>
-          <button class="max" id="max" type="button">Max</button>
-        </label>
-        <div class="line"><span>You receive</span><b id="receive">--</b></div>
-        <div class="line"><span>Pool fee</span><b id="feeAmount">--</b></div>
-        <p class="note hidden" id="note"></p>
-        <button id="submit" class="primary" disabled>Connect a wallet to trade</button>
+        <div>
+          <div class="field-label"><label for="amount">Amount</label><button type="button" id="max">Balance --</button></div>
+          <div class="field">
+            <input id="amount" inputmode="decimal" autocomplete="off" value="0.001" />
+            <span class="unit" id="unit"></span>
+          </div>
+        </div>
+        <div class="lines">
+          <div class="line"><span>You receive</span><b id="receive">--</b></div>
+          <div class="line"><span id="feeLabel">Pool fee</span><b id="feeAmount">--</b></div>
+        </div>
+        <p class="note warn hidden" id="note"></p>
+        <button id="submit" class="btn lg primary" type="button">Connect wallet</button>
         <p class="note hidden" id="faucetNote">You need a little test ETH first, it's free at <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">faucet.testnet.chain.robinhood.com</a></p>
-        <button id="watch" class="ghost hidden" type="button">Add TICKS to your wallet</button>
+        <button id="watch" class="btn subtle hidden" type="button"><img src="assets/ticks-coin.png" alt="" />Add TICKS to your wallet</button>
       </div>
     </section>
 
@@ -191,13 +289,13 @@
       <div class="panel-head"><h2>Pool position</h2><span id="positionLabel"></span></div>
       <div class="owner">
         <p>This wallet owns the pool position, so the fee from every trade builds up here until you collect it</p>
-        <button id="collect" class="ghost">Collect fees</button>
+        <button id="collect" class="btn outline" type="button">Collect fees</button>
       </div>
     </section>
 
     <section class="panel" id="activity">
       <div class="panel-head"><h2>Activity</h2><span>Your transactions</span></div>
-      <div id="log">Waiting for the deployment</div>
+      <div id="log">Loading the pool</div>
     </section>
   </div>
 </main>
@@ -215,10 +313,12 @@
     rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
     blockExplorers: { default: { name: "Explorer", url: "https://explorer.testnet.chain.robinhood.com" } },
   };
+  const CHAIN_HEX = "0xb626";
   const POOL_MANAGER = "0x8366a39CC670B4001A1121B8F6A443A643e40951";
   const STATE_VIEW = "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b";
   const MIN_SQRT = 4295128739n + 1n;
   const Q96 = 2n ** 96n;
+  const ICON = { ETH: "assets/eth.svg", TICKS: "assets/ticks-coin.png" };
 
   const routerAbi = parseAbi([
     "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,(bool takeClaims,bool settleUsingBurn) testSettings,bytes hookData) payable returns (int256)",
@@ -232,7 +332,6 @@
   const swapEvent = parseAbiItem("event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)");
 
   const $ = (id) => document.getElementById(id);
-  // ?rpc=http://127.0.0.1:8548 points the page at a local fork instead of the public testnet.
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
   const pub = createPublicClient({ chain, transport: http(rpc) });
   let d, wallet, account, provider, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
@@ -265,6 +364,7 @@
   const key = () => ({ currency0: d.currency0, currency1: d.currency1, fee: d.fee, tickSpacing: d.tickSpacing, hooks: "0x0000000000000000000000000000000000000000" });
   const txLink = (hash) => `<a href="${chain.blockExplorers.default.url}/tx/${hash}" target="_blank" rel="noreferrer">${hash.slice(0, 10)}…</a>`;
   const abs = (v) => (v < 0n ? -v : v);
+  const unitHtml = (symbol) => `<img src="${ICON[symbol]}" alt="" />${symbol}`;
 
   function log(text, isError = false) {
     const box = $("log");
@@ -277,24 +377,31 @@
 
   function drawChart(points) {
     const box = $("chart");
-    if (points.length < 2) { box.innerHTML = '<div class="empty">The chart fills in as people trade</div>'; return; }
-    const w = 700, h = 200, pad = 8;
+    if (points.length < 2) { box.innerHTML = '<div class="chart-empty">The chart fills in as people trade</div>'; return; }
+    const w = 700, h = 200;
     const ys = points.map((p) => p.mcap);
     const lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || hi * 0.01 || 1;
-    const x = (i) => pad + (i / (points.length - 1)) * (w - pad * 2);
-    const y = (v) => h - pad - ((v - lo) / span) * (h - pad * 2);
+    const top = hi + span * 0.12, bottom = lo - span * 0.12;
+    const x = (i) => (i / (points.length - 1)) * w;
+    const y = (v) => h - ((v - bottom) / (top - bottom)) * h;
     const path = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.mcap).toFixed(1)}`).join(" ");
-    const area = `${path} L${x(points.length - 1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+    const area = `${path} L${w},${h} L0,${h} Z`;
+    const floorY = y(points[0].mcap).toFixed(1);
     box.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Market cap over trades">
-      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b7f34a" stop-opacity=".25"/><stop offset="1" stop-color="#b7f34a" stop-opacity="0"/></linearGradient></defs>
-      <path d="${area}" fill="url(#g)"/><path d="${path}" fill="none" stroke="#b7f34a" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color: var(--long); stop-opacity: .22" /><stop offset="1" style="stop-color: var(--long); stop-opacity: 0" /></linearGradient></defs>
+      <line class="floor" x1="0" x2="${w}" y1="${floorY}" y2="${floorY}" />
+      <path d="${area}" fill="url(#g)" /><path class="line" d="${path}" /></svg>
+      <span class="floor-label">Launch ${usd(points[0].mcap)}</span>`;
   }
 
   function drawTape(rows) {
     $("tradeCount").textContent = String(rows.length);
-    if (!rows.length) { $("tape").innerHTML = '<div class="empty">No trades yet</div>'; return; }
+    if (!rows.length) {
+      $("tape").innerHTML = `<div class="empty"><img src="assets/mascot-terminal.png" alt="" width="84" height="96" /><b>No trades yet</b><span>Be the first to buy</span></div>`;
+      return;
+    }
     const body = rows.slice().reverse().slice(0, 25).map((r) => `<tr>
-      <td class="${r.buy ? "up" : "down"}">${r.buy ? "Buy" : "Sell"}</td>
+      <td><span class="badge ${r.buy ? "long" : "short"}">${r.buy ? "Buy" : "Sell"}</span></td>
       <td class="r">${fmt(r.tokens, 0)}</td>
       <td class="r">${fmt(r.eth, 5)}</td>
       <td class="r">${usd(r.mcap)}</td>
@@ -304,7 +411,6 @@
   }
 
   async function loadHistory() {
-    // RPCs cap a log query at 10M blocks, about a month of Robinhood Chain: plenty for a test pool.
     const latest = await pub.getBlockNumber();
     const fromBlock = latest > 9_990_000n ? latest - 9_990_000n : 0n;
     const swaps = await pub.getLogs({ address: POOL_MANAGER, event: swapEvent, args: { id: d.poolId }, fromBlock });
@@ -313,7 +419,6 @@
     const rows = swaps.map((l, i) => {
       const mcap = mcapAt(l.args.sqrtPriceX96);
       points.push({ mcap });
-      // The amounts are the swapper's: on a buy they pay ETH (negative) and receive TICKS.
       const buy = l.args.amount0 < 0n;
       return { buy, eth: Number(formatEther(abs(l.args.amount0))), tokens: Number(formatEther(abs(l.args.amount1))), mcap, tx: l.transactionHash, wallet: txs[i].from };
     });
@@ -327,9 +432,14 @@
       pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "getPositionLiquidity", args: [BigInt(d.positionId)] }),
     ]);
     pool = { sqrt, liquidity };
-    $("mcap").textContent = usd(mcapAt(sqrt));
+    const now = mcapAt(sqrt), launch = mcapAt(floor), change = (now / launch - 1) * 100;
+    $("mcap").textContent = usd(now);
     $("price").textContent = usd(priceAt(sqrt));
-    $("feeRate").textContent = `${d.fee / 10000}%`;
+    $("launch").textContent = usd(launch);
+    $("delta").textContent = `${change >= 0.005 ? "+" : ""}${change.toFixed(2)}% from launch`;
+    $("delta").classList.toggle("up", change >= 0.005);
+    $("poolFeeTag").textContent = `${d.fee / 10000}% pool fee`;
+    $("feeLabel").textContent = `Pool fee ${d.fee / 10000}%`;
     if (account) {
       const [eth, tok] = await Promise.all([
         pub.getBalance({ address: account }),
@@ -342,10 +452,10 @@
   }
 
   function quote() {
-    $("unit").textContent = side === "buy" ? "ETH" : "TICKS";
-    $("balance").textContent = account
-      ? side === "buy" ? `${fmt(Number(formatEther(balances.eth)), 5)} ETH` : `${fmt(Number(formatEther(balances.tok)), 0)} TICKS`
-      : "--";
+    $("unit").innerHTML = unitHtml(side === "buy" ? "ETH" : "TICKS");
+    $("max").textContent = account
+      ? `Balance ${side === "buy" ? `${fmt(Number(formatEther(balances.eth)), 5)} ETH` : `${fmt(Number(formatEther(balances.tok)), 0)} TICKS`}`
+      : "Balance --";
     const amount = Number($("amount").value) || 0;
     const room = pool && side === "sell" ? Number(formatEther(sellRoom())) : Infinity;
     const blocked = room < 1;
@@ -367,9 +477,9 @@
     $("note").classList.toggle("hidden", !note);
     $("faucetNote").classList.toggle("hidden", !account || balances.eth >= parseEther("0.0005"));
     const button = $("submit");
-    button.classList.toggle("sell", side === "sell");
-    button.disabled = !account || !amount || blocked;
-    button.textContent = !account ? "Connect a wallet to trade" : side === "buy" ? "Buy TICKS" : blocked ? "Nothing to sell into yet" : "Sell TICKS";
+    button.className = `btn lg ${!account ? "primary" : side === "buy" ? "long" : "short"}`;
+    button.disabled = Boolean(account) && (!amount || blocked);
+    button.textContent = !account ? "Connect wallet" : side === "buy" ? "Buy TICKS" : blocked ? "Nothing to sell into yet" : "Sell TICKS";
   }
 
   async function send(label, request) {
@@ -389,10 +499,7 @@
   document.querySelectorAll(".seg button").forEach((b) => {
     b.onclick = () => {
       side = b.dataset.side;
-      document.querySelectorAll(".seg button").forEach((x) => {
-        x.classList.toggle("on", x === b);
-        x.setAttribute("aria-selected", String(x === b));
-      });
+      document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
       $("amount").value = side === "buy" ? "0.001" : "100000";
       quote();
     };
@@ -408,8 +515,13 @@
     quote();
   };
 
-  // EIP-6963: every installed wallet announces itself, so the player picks one instead of whichever
-  // extension won the race for window.ethereum.
+  $("theme").onclick = () => {
+    const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("ticks-theme", next); } catch {}
+  };
+
   const wallets = new Map();
   window.addEventListener("eip6963:announceProvider", (event) => wallets.set(event.detail.info.uuid, event.detail));
   window.dispatchEvent(new Event("eip6963:requestProvider"));
@@ -419,10 +531,10 @@
     $("connect").setAttribute("aria-expanded", "false");
   }
   document.addEventListener("click", (event) => {
-    if (!event.target.closest(".wallet")) closeMenu();
+    if (!event.target.closest(".wallet") && event.target.id !== "submit") closeMenu();
   });
 
-  $("connect").onclick = () => {
+  function openWallets() {
     const found = [...wallets.values()];
     if (found.length === 0) {
       if (window.ethereum) return connectWith(window.ethereum);
@@ -431,33 +543,46 @@
     if (found.length === 1) return connectWith(found[0].provider);
     const menu = $("walletMenu");
     menu.querySelectorAll("button").forEach((b) => b.remove());
-    for (const { info, provider } of found) {
+    for (const { info, provider: option } of found) {
       const item = document.createElement("button");
+      item.type = "button";
       item.setAttribute("role", "menuitem");
       item.innerHTML = `<img alt="" src="${info.icon}" />${info.name}`;
-      item.onclick = () => { closeMenu(); connectWith(provider); };
+      item.onclick = () => { closeMenu(); connectWith(option); };
       menu.append(item);
     }
-    menu.classList.toggle("hidden");
-    $("connect").setAttribute("aria-expanded", String(!menu.classList.contains("hidden")));
-  };
+    menu.classList.remove("hidden");
+    $("connect").setAttribute("aria-expanded", "true");
+  }
+  $("connect").onclick = () => (account ? null : openWallets());
+
+  async function useTestnet() {
+    try {
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
+    } catch (error) {
+      const missing = error.code === 4902 || error.data?.originalError?.code === 4902;
+      if (!missing) throw error;
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [{ chainId: CHAIN_HEX, chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }],
+      });
+    }
+  }
 
   async function connectWith(chosen) {
     provider = chosen;
     let addr;
     try {
       [addr] = await provider.request({ method: "eth_requestAccounts" });
-      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0xb626" }] });
+      await useTestnet();
     } catch (error) {
-      if (error.code !== 4902) return log(error.message, true);
-      await provider.request({
-        method: "wallet_addEthereumChain",
-        params: [{ chainId: "0xb626", chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }],
-      });
+      return log(error.shortMessage || error.message, true);
     }
     account = addr;
     wallet = createWalletClient({ chain, transport: custom(provider) });
     $("connect").textContent = short(addr);
+    $("connect").className = "btn subtle address";
+    quote();
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
@@ -476,6 +601,7 @@
   };
 
   $("submit").onclick = async () => {
+    if (!account) return openWallets();
     const amount = parseEther($("amount").value);
     if (side === "buy") {
       await send("Buy", {
@@ -507,12 +633,15 @@
     if (receipt) log(`Collected ${fmt(Number(formatEther(balances.tok - tokBefore)), 2)} TICKS in fees, the ETH fees are in your ETH balance`);
   };
 
+  quote();
   try {
     d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
     floor = BigInt(d.launchSqrtPriceX96);
+    $("tokenLink").textContent = short(d.token);
+    $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
-    log(`Pool for ${short(d.token)} ready, position #${d.positionId} owned by ${short(owner)}`);
+    log(`Pool ready, position #${d.positionId} owned by ${short(owner)}`);
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     log(`No testnet deployment found yet: ${error.message}`, true);
