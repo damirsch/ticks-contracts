@@ -51,13 +51,15 @@ The pool holds only TICKS at launch, so the launch price is a floor: a sell can 
 ## Launch
 
 ```sh
-# 1. Deploy the token and open the pool (fill the launch section of .env first)
-forge script script/Launch.s.sol --rpc-url robinhood --broadcast --private-key $DEPLOYER_KEY
+# 1. Deploy the token and open the pool (fill the launch section of .env first). The key lives in
+#    Foundry's encrypted keystore so it never lands in the shell history: cast wallet import deployer --interactive
+forge script script/Launch.s.sol --rpc-url robinhood --broadcast --account deployer
 
 # 2. Distribute the rest of the supply (check first, then add --send)
 node tools/send-tokens.mjs --file allocation.csv --token <TOKEN>
 
-# 3. Each season, pay the rewards from the admin's PAYOUTS export
+# 3. Each season, pay the rewards from the admin's PAYOUTS export, from a payout wallet that holds only
+#    this season's TICKS (the rest of the rewards stay in the cold wallet)
 node tools/send-tokens.mjs --file season-1-payouts.csv --token <TOKEN> \
   --address-column wallet_address --amount-column total_ticks
 ```

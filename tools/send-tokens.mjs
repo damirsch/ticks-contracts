@@ -6,12 +6,14 @@
 //     [--amount-column total_ticks] [--ledger ledgers/season-1.jsonl] [--rpc …] [--send]
 //
 // Without --send it only checks the file and prints what it would do. With --send it signs with PRIVATE_KEY
-// and writes every confirmed transfer to the ledger, so a run that stops halfway can be started again and
-// pays nobody twice.
+// and writes every transfer to the ledger before broadcasting it, so a run that stops halfway can be started
+// again and pays nobody twice.
 
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createPublicClient, createWalletClient, erc20Abi, formatUnits, getAddress, http, parseUnits } from "viem";
+import {
+  createPublicClient, createWalletClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http, keccak256, parseUnits,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const DECIMALS = 18;
@@ -98,35 +100,70 @@ function readTransfers(opts) {
 
 function readLedger(path) {
   if (!existsSync(path)) return new Map();
-  const done = new Map();
+  const entries = new Map();
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     const entry = JSON.parse(line);
-    done.set(getAddress(entry.address), entry);
+    entries.set(getAddress(entry.address), { ...entry, status: entry.status ?? "paid" });
   }
-  return done;
+  return entries;
+}
+
+function record(path, entry) {
+  appendFileSync(path, `${JSON.stringify(entry)}\n`);
+}
+
+async function settle(client, account, entry) {
+  const find = () => client.getTransactionReceipt({ hash: entry.tx }).catch(() => null);
+  let receipt = await find();
+  if (!receipt && (await client.getTransactionCount({ address: account })) > entry.nonce) {
+    receipt = await find();
+    if (!receipt) return "failed";
+  }
+  if (!receipt) {
+    await client.sendRawTransaction({ serializedTransaction: entry.raw }).catch(() => {});
+    receipt = await client.waitForTransactionReceipt({ hash: entry.tx, timeout: 120_000 }).catch(() => null);
+    if (!receipt) throw new Error(`the transfer to ${entry.address} in ${entry.tx} is still not confirmed, run again in a few minutes`);
+  }
+  return receipt.status === "success" ? "paid" : "failed";
 }
 
 async function main() {
   const opts = args();
   const token = getAddress(opts.token);
   const { transfers, skipped } = readTransfers(opts);
-  const done = readLedger(opts.ledger);
-  const pending = transfers.filter((t) => !done.has(t.address));
+  const ledger = readLedger(opts.ledger);
   for (const t of transfers) {
-    const entry = done.get(t.address);
-    if (entry && BigInt(entry.amount) !== t.amount) {
+    const entry = ledger.get(t.address);
+    if (entry && entry.status !== "failed" && BigInt(entry.amount) !== t.amount) {
       throw new Error(`${t.address} was already paid ${entry.amount} in ${entry.tx}, but the file now says ${t.amount}`);
     }
   }
 
+  const client = createPublicClient({ transport: http(opts.rpc) });
+  let account;
+  if (opts.send) {
+    const key = process.env.PRIVATE_KEY;
+    if (!key) throw new Error("PRIVATE_KEY is not set");
+    account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
+    for (const entry of ledger.values()) {
+      if (entry.status !== "sent") continue;
+      entry.status = await settle(client, account.address, entry);
+      record(opts.ledger, entry);
+      console.log(`earlier transfer to ${entry.address} ${entry.status === "paid" ? "went through" : "did not go through and is sent again"}`);
+    }
+  }
+
+  const unsure = [...ledger.values()].filter((e) => e.status === "sent");
+  const paid = transfers.filter((t) => ledger.get(t.address)?.status === "paid");
+  const pending = transfers.filter((t) => !ledger.has(t.address) || ledger.get(t.address).status === "failed");
   const total = pending.reduce((sum, t) => sum + t.amount, 0n);
-  console.log(`${transfers.length} wallets in the file, ${done.size} already paid, ${pending.length} to pay`);
+  console.log(`${transfers.length} wallets in the file, ${paid.length} already paid, ${pending.length} to pay`);
+  if (unsure.length) console.log(`${unsure.length} sent earlier without a confirmation, the --send run checks them first`);
   console.log(`to send: ${formatUnits(total, DECIMALS)} TICKS`);
   for (const s of skipped) console.log(`skipped ${s}`);
   if (!pending.length) return;
 
-  const client = createPublicClient({ transport: http(opts.rpc) });
   if (!opts.send) {
     for (const t of pending.slice(0, 5)) console.log(`  ${t.address}  ${formatUnits(t.amount, DECIMALS)}`);
     if (pending.length > 5) console.log(`  … and ${pending.length - 5} more`);
@@ -134,9 +171,6 @@ async function main() {
     return;
   }
 
-  const key = process.env.PRIVATE_KEY;
-  if (!key) throw new Error("PRIVATE_KEY is not set");
-  const account = privateKeyToAccount(key.startsWith("0x") ? key : `0x${key}`);
   const chain = { id: await client.getChainId(), name: "robinhood", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [opts.rpc] } } };
   const wallet = createWalletClient({ account, chain, transport: http(opts.rpc) });
 
@@ -147,11 +181,17 @@ async function main() {
 
   mkdirSync(dirname(opts.ledger), { recursive: true });
   for (const [i, t] of pending.entries()) {
-    const hash = await wallet.writeContract({ address: token, abi: erc20Abi, functionName: "transfer", args: [t.address, t.amount] });
-    const receipt = await client.waitForTransactionReceipt({ hash });
-    if (receipt.status !== "success") throw new Error(`transfer to ${t.address} failed in ${hash}`);
-    appendFileSync(opts.ledger, `${JSON.stringify({ address: t.address, amount: t.amount.toString(), tx: hash })}\n`);
-    console.log(`${i + 1}/${pending.length}  ${t.address}  ${formatUnits(t.amount, DECIMALS)}  ${hash}`);
+    const data = encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [t.address, t.amount] });
+    const request = await wallet.prepareTransactionRequest({ to: token, data });
+    const raw = await wallet.signTransaction(request);
+    const entry = { address: t.address, amount: t.amount.toString(), tx: keccak256(raw), nonce: request.nonce, raw, status: "sent" };
+    record(opts.ledger, entry);
+    await client.sendRawTransaction({ serializedTransaction: raw });
+    const receipt = await client.waitForTransactionReceipt({ hash: entry.tx });
+    entry.status = receipt.status === "success" ? "paid" : "failed";
+    record(opts.ledger, entry);
+    if (entry.status === "failed") throw new Error(`transfer to ${t.address} failed in ${entry.tx}`);
+    console.log(`${i + 1}/${pending.length}  ${t.address}  ${formatUnits(t.amount, DECIMALS)}  ${entry.tx}`);
   }
   console.log(`done, the ledger is in ${opts.ledger}`);
 }
