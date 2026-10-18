@@ -66,10 +66,14 @@ node tools/find-position.mjs
 #    TICKS before the first trade, and keeps 4% of the fees collected later. test/Lock.t.sol runs the real
 #    locker on a fork to show every rule
 
-# 3. Distribute the rest of the supply (check first, then add --send)
+# 3. Fill in the token card (logo, site, socials) on GeckoTerminal (free update form), DexScreener
+#    (Enhanced Token Info) and Blockscout, since trading apps like Fomo and the pump.fun app show what
+#    these aggregators know about a token
+
+# 4. Distribute the rest of the supply (check first, then add --send)
 node tools/send-tokens.mjs --file allocation.csv --token <TOKEN>
 
-# 4. Each season, pay the rewards from the admin's PAYOUTS export, from a payout wallet that holds only
+# 5. Each season, pay the rewards from the admin's PAYOUTS export, from a payout wallet that holds only
 #    this season's TICKS (the rest of the rewards stay in the cold wallet)
 node tools/send-tokens.mjs --file season-1-payouts.csv --token <TOKEN> \
   --address-column wallet_address --amount-column total_ticks
