@@ -18,6 +18,7 @@ contract TestnetSetup is Script {
     function run() external {
         address owner = vm.envAddress("OWNER");
         address tester = vm.envOr("TESTER", owner);
+        address team = vm.envOr("TEAM", address(uint160(uint256(keccak256("ticks testnet team")))));
         uint256 supply = 1_000_000_000e18;
         uint256 ethPriceE6 = vm.envOr("PAIR_PRICE_USD_E6", uint256(2_500e6));
         uint256 startMarketCap = vm.envOr("START_MARKET_CAP_USD", uint256(75_000));
@@ -41,6 +42,7 @@ contract TestnetSetup is Script {
         uint256 tokenId = LaunchPlan.execute(cfg, p, block.timestamp + 30 minutes);
         PoolSwapTest router = new PoolSwapTest(IPoolManager(LaunchPlan.POOL_MANAGER));
         token.transfer(tester, 1_000_000e18);
+        token.transfer(team, 100_000_000e18);
         vm.stopBroadcast();
 
         string memory o = "deployment";
@@ -57,6 +59,8 @@ contract TestnetSetup is Script {
         vm.serializeUint(o, "ethPriceUsdE6", ethPriceE6);
         vm.serializeUint(o, "startMarketCapUsd", startMarketCap);
         vm.serializeUint(o, "launchSqrtPriceX96", p.sqrtPriceX96);
+        vm.serializeAddress(o, "teamWallet", team);
+        vm.serializeAddress(o, "rewardsWallet", msg.sender);
         string memory json = vm.serializeBytes32(o, "poolId", PoolId.unwrap(PoolIdLibrary.toId(p.key)));
         vm.writeJson(json, "deployments/testnet.json");
 

@@ -8,9 +8,11 @@
   "poolId": "0xfe9105a19a02f31eff532ab2c0220a362c622aaeda8fd3b6b217e716d77e9c25",
   "positionId": 593000,
   "positionManager": "0x58daec3116aae6D93017bAAea7749052E8a04fA7",
+  "rewardsWallet": "0xfe79e24225d3B2A0f57f0D25e0d528D2458b872e",
   "router": "0xaEb517Df0cC083e277bC4E058c75Ef35aD304D80",
   "startMarketCapUsd": 150000,
   "supply": "1000000000000000000000000000",
+  "teamWallet": "0xBC341b4d4d72c4be57c1B5AcAfE3e46fAd838C24",
   "tickSpacing": 200,
   "token": "0x920694e325e168964Bc83373d39b217C79FA13ae"
 }
