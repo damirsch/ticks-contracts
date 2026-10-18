@@ -171,6 +171,9 @@
     td.r, th.r { text-align: right; }
     td a { color: var(--muted); text-decoration: none; }
     td a:hover { color: var(--fg); }
+    td.when { color: var(--subtle); }
+    tr.mine td { background: color-mix(in oklab, var(--accent) 6%, transparent); }
+    td .badge { margin-right: 8px; }
     .empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 16px 32px; text-align: center; }
     .empty img { width: auto; height: 96px; margin-bottom: 4px; }
     .empty b { font: 700 18px/1.12 var(--sans); text-transform: uppercase; }
@@ -199,10 +202,12 @@
 
     .owner { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
     .owner p { margin: 0; color: var(--muted); font-size: 14px; }
-    #log { padding: 12px 16px; font: 400 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
+    #log { padding: 4px 16px; font: 400 12px/1.6 var(--mono); color: var(--muted); max-height: 320px; overflow: auto; }
     #log .err { color: var(--short); }
     #log .addr { white-space: nowrap; }
-    #log .when { color: var(--subtle); margin-right: 10px; white-space: nowrap; }
+    #log > div { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    #log > div:last-child { border-bottom: 0; }
+    #log .when { display: block; color: var(--subtle); font-size: 11px; }
     #log .quiet { color: var(--subtle); }
 
     @media (max-width: 880px) {
@@ -257,7 +262,7 @@
     </section>
 
     <section class="panel" id="trades">
-      <div class="panel-head"><h2>Trades</h2><span>Newest first</span></div>
+      <div class="panel-head"><h2>Trades</h2><span>Everyone, newest first</span></div>
       <div class="tape" id="tape"></div>
     </section>
   </div>
@@ -297,7 +302,7 @@
     </section>
 
     <section class="panel" id="activity">
-      <div class="panel-head"><h2>Activity</h2><span>Your transactions</span></div>
+      <div class="panel-head"><h2>Your wallet</h2><span>Read from the chain</span></div>
       <div id="log">Loading the pool</div>
     </section>
   </div>
@@ -380,6 +385,12 @@
   };
   let notes = [], history = [], historyFor = null, status = "Loading the pool";
   const tok = (v) => Number(formatEther(v));
+  const blockTimes = new Map();
+  async function timesOf(blocks) {
+    const missing = [...new Set(blocks)].filter((b) => !blockTimes.has(b));
+    await Promise.all(missing.map(async (b) => blockTimes.set(b, (await pub.getBlock({ blockNumber: b })).timestamp)));
+    return blockTimes;
+  }
   const when = (ts) => new Date(Number(ts) * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
   function renderActivity() {
@@ -388,7 +399,7 @@
     if (account && historyFor !== account) lines.push(`<div class="quiet">Loading this wallet's history</div>`);
     else if (account && !history.length) lines.push(`<div class="quiet">No transactions from this wallet yet</div>`);
     if (!account) lines.push(`<div class="quiet">Connect a wallet to see its history</div>`);
-    lines.push(`<div class="quiet">${status}</div>`);
+    if (status) lines.push(`<div class="quiet">${status}</div>`);
     $("log").innerHTML = lines.join("");
   }
 
@@ -441,8 +452,7 @@
     });
     items.sort((a, b) => (a.block === b.block ? b.index - a.index : a.block < b.block ? 1 : -1));
     const top = items.slice(0, 30);
-    const blocks = [...new Set(top.map((i) => i.block))];
-    const times = new Map(await Promise.all(blocks.map(async (b) => [b, (await pub.getBlock({ blockNumber: b })).timestamp])));
+    const times = await timesOf(top.map((i) => i.block));
     history = top.map((i) => ({ ...i, time: times.get(i.block) }));
     historyFor = account;
     renderActivity();
@@ -473,14 +483,16 @@
       $("tape").innerHTML = `<div class="empty"><img src="assets/mascot-terminal.png" alt="" width="84" height="96" /><b>No trades yet</b><span>Be the first to buy</span></div>`;
       return;
     }
-    const body = rows.slice().reverse().slice(0, 25).map((r) => `<tr>
+    const me = account?.toLowerCase();
+    const body = rows.slice().reverse().slice(0, 25).map((r) => `<tr class="${r.wallet.toLowerCase() === me ? "mine" : ""}">
+      <td class="when">${r.time ? when(r.time) : ""}</td>
       <td><span class="badge ${r.buy ? "long" : "short"}">${r.buy ? "Buy" : "Sell"}</span></td>
       <td class="r">${fmt(r.tokens, 0)}</td>
       <td class="r">${fmt(r.eth, 5)}</td>
       <td class="r">${usd(r.mcap)}</td>
-      <td class="r"><a href="${chain.blockExplorers.default.url}/tx/${r.tx}" target="_blank" rel="noreferrer">${short(r.wallet)}</a></td>
+      <td class="r">${r.wallet.toLowerCase() === me ? '<span class="badge neutral">You</span>' : ""}<a href="${chain.blockExplorers.default.url}/tx/${r.tx}" target="_blank" rel="noreferrer">${short(r.wallet)}</a></td>
     </tr>`).join("");
-    $("tape").innerHTML = `<table><thead><tr><th>Side</th><th class="r">TICKS</th><th class="r">ETH</th><th class="r">Market cap</th><th class="r">Wallet</th></tr></thead><tbody>${body}</tbody></table>`;
+    $("tape").innerHTML = `<table><thead><tr><th>Time</th><th>Side</th><th class="r">TICKS</th><th class="r">ETH</th><th class="r">Market cap</th><th class="r">Wallet</th></tr></thead><tbody>${body}</tbody></table>`;
   }
 
   async function loadHistory() {
@@ -495,6 +507,8 @@
       const buy = l.args.amount0 < 0n;
       return { buy, eth: Number(formatEther(abs(l.args.amount0))), tokens: Number(formatEther(abs(l.args.amount1))), mcap, tx: l.transactionHash, wallet: txs[i].from, block: l.blockNumber, index: l.logIndex };
     });
+    const times = await timesOf(rows.slice(-25).map((r) => r.block));
+    for (const r of rows) r.time = times.get(r.block);
     drawChart(points);
     drawTape(rows);
     await loadActivity(fromBlock, rows);
@@ -732,8 +746,7 @@
     $("tokenLink").textContent = short(d.token);
     $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
-    const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
-    status = `Pool ready, position #${d.positionId} owned by <span class="addr">${short(owner)}</span>`;
+    status = "";
     renderActivity();
     await reconnect().catch(() => {});
     setInterval(() => refresh().catch(() => {}), 15000);
