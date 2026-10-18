@@ -202,6 +202,8 @@
     #log { padding: 12px 16px; font: 400 12px/1.7 var(--mono); color: var(--muted); max-height: 220px; overflow: auto; }
     #log .err { color: var(--short); }
     #log .addr { white-space: nowrap; }
+    #log .when { color: var(--subtle); margin-right: 10px; white-space: nowrap; }
+    #log .quiet { color: var(--subtle); }
 
     @media (max-width: 880px) {
       main { grid-template-columns: minmax(0, 1fr); padding: 16px; }
@@ -331,6 +333,10 @@
     "function getPositionLiquidity(uint256 tokenId) view returns (uint128)",
   ]);
   const swapEvent = parseAbiItem("event Swap(bytes32 indexed id, address indexed sender, int128 amount0, int128 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick, uint24 fee)");
+  const modifyEvent = parseAbiItem("event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)");
+  const transferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+  const approvalEvent = parseAbiItem("event Approval(address indexed owner, address indexed spender, uint256 value)");
+  const nftTransferEvent = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 indexed id)");
 
   const $ = (id) => document.getElementById(id);
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
@@ -368,35 +374,78 @@
   const unitHtml = (symbol) => `<img src="${ICON[symbol]}" alt="" />${symbol}`;
 
   const WALLET_KEY = "ticks-testnet-wallet";
-  let activity = [];
-  const activityKey = () => (account && d ? `ticks-testnet-activity:${d.token}:${account.toLowerCase()}` : null);
   const store = {
     get(key) { try { return localStorage.getItem(key); } catch { return null; } },
     set(key, value) { try { localStorage.setItem(key, value); } catch {} },
   };
+  let notes = [], history = [], historyFor = null, status = "Loading the pool";
+  const tok = (v) => Number(formatEther(v));
+  const when = (ts) => new Date(Number(ts) * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 
-  function addLine(text, isError) {
-    const box = $("log");
-    if (box.dataset.started !== "1") { box.textContent = ""; box.dataset.started = "1"; }
-    const line = document.createElement("div");
-    if (isError) line.className = "err";
-    line.innerHTML = text;
-    box.prepend(line);
+  function renderActivity() {
+    const lines = notes.map((n) => `<div class="${n.isError ? "err" : ""}">${n.text}</div>`);
+    for (const h of history) lines.push(`<div><span class="when">${when(h.time)}</span>${h.text} ${txLink(h.tx)}</div>`);
+    if (account && historyFor !== account) lines.push(`<div class="quiet">Loading this wallet's history</div>`);
+    else if (account && !history.length) lines.push(`<div class="quiet">No transactions from this wallet yet</div>`);
+    if (!account) lines.push(`<div class="quiet">Connect a wallet to see its history</div>`);
+    lines.push(`<div class="quiet">${status}</div>`);
+    $("log").innerHTML = lines.join("");
   }
 
-  function log(text, isError = false) {
-    addLine(text, isError);
-    const key = activityKey();
-    if (!key) return;
-    activity = [{ text, isError }, ...activity].slice(0, 50);
-    store.set(key, JSON.stringify(activity));
+  function log(text, isError = false, hash = null) {
+    notes = [{ text, isError, hash }, ...notes].slice(0, 10);
+    renderActivity();
   }
 
-  function restoreActivity() {
-    const key = activityKey();
-    if (!key) return;
-    try { activity = JSON.parse(store.get(key) || "[]"); } catch { activity = []; }
-    for (const entry of activity.slice().reverse()) addLine(entry.text, entry.isError);
+  async function loadActivity(fromBlock, swapRows) {
+    if (!account) { history = []; return renderActivity(); }
+    const me = account.toLowerCase(), pm = POOL_MANAGER.toLowerCase();
+    const id = BigInt(d.positionId);
+    const [incoming, outgoing, approvals, modifies, positionIn, positionOut] = await Promise.all([
+      pub.getLogs({ address: d.token, event: transferEvent, args: { to: account }, fromBlock }),
+      pub.getLogs({ address: d.token, event: transferEvent, args: { from: account }, fromBlock }),
+      pub.getLogs({ address: d.token, event: approvalEvent, args: { owner: account }, fromBlock }),
+      pub.getLogs({ address: POOL_MANAGER, event: modifyEvent, args: { id: d.poolId }, fromBlock }),
+      pub.getLogs({ address: d.positionManager, event: nftTransferEvent, args: { to: account, id }, fromBlock }),
+      pub.getLogs({ address: d.positionManager, event: nftTransferEvent, args: { from: account, id }, fromBlock }),
+    ]);
+    const at = (l) => ({ block: l.blockNumber, index: l.logIndex, tx: l.transactionHash });
+    const items = [];
+    for (const r of swapRows) {
+      if (r.wallet.toLowerCase() !== me) continue;
+      items.push({ block: r.block, index: r.index, tx: r.tx, text: `${r.buy ? "Bought" : "Sold"} ${fmt(r.tokens, 0)} TICKS for ${fmt(r.eth, 6)} ETH` });
+    }
+    for (const l of incoming) {
+      if (l.args.from.toLowerCase() === pm) continue;
+      const minted = BigInt(l.args.from) === 0n;
+      items.push({ ...at(l), text: minted ? `Created ${fmt(tok(l.args.value), 0)} TICKS` : `Received ${fmt(tok(l.args.value), 0)} TICKS from <span class="addr">${short(l.args.from)}</span>` });
+    }
+    for (const l of outgoing) if (l.args.to.toLowerCase() !== pm) items.push({ ...at(l), text: `Sent ${fmt(tok(l.args.value), 0)} TICKS to <span class="addr">${short(l.args.to)}</span>` });
+    for (const l of approvals) {
+      if (l.args.value === 0n) continue;
+      const spender = l.args.spender.toLowerCase();
+      const who = spender === d.router.toLowerCase() ? "the pool router" : spender === "0x000000000022d473030f116ddee9f6b43ac78ba3" ? "Permit2" : `<span class="addr">${short(l.args.spender)}</span>`;
+      items.push({ ...at(l), text: `Allowed ${who} to sell your TICKS` });
+    }
+    for (const l of positionIn) {
+      const fromMint = BigInt(l.args.from) === 0n;
+      items.push({ ...at(l), text: fromMint ? `Pool position #${d.positionId} created in this wallet` : `Received the pool position #${d.positionId} from <span class="addr">${short(l.args.from)}</span>` });
+    }
+    for (const l of positionOut) items.push({ ...at(l), text: `Moved the pool position #${d.positionId} to <span class="addr">${short(l.args.to)}</span>` });
+    const collects = modifies.filter((l) => l.args.liquidityDelta === 0n);
+    const collectTxs = await Promise.all(collects.map((l) => pub.getTransaction({ hash: l.transactionHash })));
+    collects.forEach((l, i) => {
+      if (collectTxs[i].from.toLowerCase() !== me) return;
+      const ticks = incoming.filter((t) => t.transactionHash === l.transactionHash && t.args.from.toLowerCase() === pm).reduce((sum, t) => sum + tok(t.args.value), 0);
+      items.push({ ...at(l), text: `Collected pool fees${ticks ? `, ${fmt(ticks, 0)} TICKS and the ETH share` : ""}` });
+    });
+    items.sort((a, b) => (a.block === b.block ? b.index - a.index : a.block < b.block ? 1 : -1));
+    const top = items.slice(0, 30);
+    const blocks = [...new Set(top.map((i) => i.block))];
+    const times = new Map(await Promise.all(blocks.map(async (b) => [b, (await pub.getBlock({ blockNumber: b })).timestamp])));
+    history = top.map((i) => ({ ...i, time: times.get(i.block) }));
+    historyFor = account;
+    renderActivity();
   }
 
   function drawChart(points) {
@@ -444,10 +493,11 @@
       const mcap = mcapAt(l.args.sqrtPriceX96);
       points.push({ mcap });
       const buy = l.args.amount0 < 0n;
-      return { buy, eth: Number(formatEther(abs(l.args.amount0))), tokens: Number(formatEther(abs(l.args.amount1))), mcap, tx: l.transactionHash, wallet: txs[i].from };
+      return { buy, eth: Number(formatEther(abs(l.args.amount0))), tokens: Number(formatEther(abs(l.args.amount1))), mcap, tx: l.transactionHash, wallet: txs[i].from, block: l.blockNumber, index: l.logIndex };
     });
     drawChart(points);
     drawTape(rows);
+    await loadActivity(fromBlock, rows);
   }
 
   async function refresh() {
@@ -510,9 +560,10 @@
     try {
       await useTestnet();
       const hash = await wallet.writeContract({ account, chain, ...request });
-      log(`${label} sent ${txLink(hash)}`);
+      log(`${label} sent, waiting for the network ${txLink(hash)}`, false, hash);
       const receipt = await pub.waitForTransactionReceipt({ hash });
-      log(`${label} ${receipt.status === "success" ? "confirmed" : "failed"} ${txLink(hash)}`, receipt.status !== "success");
+      notes = notes.filter((n) => n.hash !== hash);
+      if (receipt.status !== "success") log(`${label} failed ${txLink(hash)}`, true, hash);
       await refresh();
       return receipt.status === "success" ? receipt : null;
     } catch (error) {
@@ -629,7 +680,7 @@
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
     $("watch").classList.remove("hidden");
-    restoreActivity();
+    renderActivity();
     await refresh();
   }
 
@@ -662,18 +713,16 @@
   };
 
   $("collect").onclick = async () => {
-    const tokBefore = balances.tok;
     const decrease = encodeAbiParameters(
       [{ type: "uint256" }, { type: "uint256" }, { type: "uint128" }, { type: "uint128" }, { type: "bytes" }],
       [BigInt(d.positionId), 0n, 0n, 0n, "0x"],
     );
     const take = encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "address" }], [d.currency0, d.currency1, account]);
     const unlockData = encodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], ["0x0111", [decrease, take]]);
-    const receipt = await send("Collect fees", {
+    await send("Collect fees", {
       address: d.positionManager, abi: posmAbi, functionName: "modifyLiquidities",
       args: [unlockData, BigInt(Math.floor(Date.now() / 1000) + 1800)],
     });
-    if (receipt) log(`Collected ${fmt(Number(formatEther(balances.tok - tokBefore)), 2)} TICKS in fees, the ETH fees are in your ETH balance`);
   };
 
   quote();
@@ -684,11 +733,13 @@
     $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
-    log(`Pool ready, position #${d.positionId} owned by <span class="addr">${short(owner)}</span>`);
+    status = `Pool ready, position #${d.positionId} owned by <span class="addr">${short(owner)}</span>`;
+    renderActivity();
     await reconnect().catch(() => {});
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
-    log(`No testnet deployment found yet: ${error.message}`, true);
+    status = `No testnet deployment found yet: ${error.message}`;
+    renderActivity();
   }
 </script>
 </body>
