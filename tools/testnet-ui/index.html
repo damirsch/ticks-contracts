@@ -171,7 +171,7 @@
     .supply-legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
     .supply-legend button { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 12px; margin: -10px -12px 0; background: transparent; border: 0; border-radius: var(--radius-control); color: var(--fg); text-align: left; transition: opacity .15s, background-color .15s; }
     .supply-legend .row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-    .supply-legend .name { font: 600 14px/1 var(--sans); }
+    .supply-legend .name { font: 500 14px/1 var(--sans); color: color-mix(in oklab, var(--fg) 70%, var(--muted)); }
     .supply-legend .pct { margin-left: auto; color: var(--muted); font: 500 13px/1 var(--mono); }
     .supply-legend i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
     .supply-legend .v { font: 600 16px/1 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -493,8 +493,11 @@
     box.classList.toggle("focus", index !== null);
     box.querySelectorAll("[data-i]").forEach((el) => el.classList.toggle("on", Number(el.dataset.i) === index));
     const part = supplyParts[index];
-    $("supplyNote").textContent = part ? `${part.label}: ${part.note}` : SUPPLY_NOTE;
+    $("supplyNote").textContent = part ? `${part.label}: ${fmt(part.value, 0)} TICKS, ${part.note}` : SUPPLY_NOTE;
   }
+
+  const trim = (n, digits) => n.toFixed(digits).replace(/\.?0+$/, "");
+  const compact = (n) => (n >= 1e9 ? `${trim(n / 1e9, 2)}B` : n >= 1e6 ? `${trim(n / 1e6, 2)}M` : n >= 1e3 ? `${trim(n / 1e3, 1)}K` : fmt(n, 0));
 
   async function drawSupply() {
     const total = supplyTokens();
@@ -511,7 +514,7 @@
       { label: "Rewards", note: "the rewards treasury, paid out one season of 10M at a time", value: rewards, color: "var(--accent)" },
     ];
     $("supplyBar").innerHTML = supplyParts.map((p, i) => `<div data-i="${i}" title="${p.label}" style="flex-grow: ${p.value}; background: ${p.color}"></div>`).join("");
-    $("supplyLegend").innerHTML = supplyParts.map((p, i) => `<button type="button" data-i="${i}"><span class="row"><i style="background: ${p.color}"></i><span class="name">${p.label}</span><span class="pct">${((p.value / total) * 100).toFixed(2)}%</span></span><span class="v">${fmt(p.value, 0)}</span></button>`).join("");
+    $("supplyLegend").innerHTML = supplyParts.map((p, i) => `<button type="button" data-i="${i}"><span class="row"><i style="background: ${p.color}"></i><span class="name">${p.label}</span><span class="pct">${trim((p.value / total) * 100, 2)}%</span></span><span class="v">${compact(p.value)}</span></button>`).join("");
     focusSupply(supplyActive);
   }
 
