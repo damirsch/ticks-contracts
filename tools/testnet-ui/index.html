@@ -367,13 +367,36 @@
   const abs = (v) => (v < 0n ? -v : v);
   const unitHtml = (symbol) => `<img src="${ICON[symbol]}" alt="" />${symbol}`;
 
-  function log(text, isError = false) {
+  const WALLET_KEY = "ticks-testnet-wallet";
+  let activity = [];
+  const activityKey = () => (account && d ? `ticks-testnet-activity:${d.token}:${account.toLowerCase()}` : null);
+  const store = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch {} },
+  };
+
+  function addLine(text, isError) {
     const box = $("log");
     if (box.dataset.started !== "1") { box.textContent = ""; box.dataset.started = "1"; }
     const line = document.createElement("div");
     if (isError) line.className = "err";
     line.innerHTML = text;
     box.prepend(line);
+  }
+
+  function log(text, isError = false) {
+    addLine(text, isError);
+    const key = activityKey();
+    if (!key) return;
+    activity = [{ text, isError }, ...activity].slice(0, 50);
+    store.set(key, JSON.stringify(activity));
+  }
+
+  function restoreActivity() {
+    const key = activityKey();
+    if (!key) return;
+    try { activity = JSON.parse(store.get(key) || "[]"); } catch { activity = []; }
+    for (const entry of activity.slice().reverse()) addLine(entry.text, entry.isError);
   }
 
   function drawChart(points) {
@@ -485,6 +508,7 @@
 
   async function send(label, request) {
     try {
+      await useTestnet();
       const hash = await wallet.writeContract({ account, chain, ...request });
       log(`${label} sent ${txLink(hash)}`);
       const receipt = await pub.waitForTransactionReceipt({ hash });
@@ -538,10 +562,10 @@
   function openWallets() {
     const found = [...wallets.values()];
     if (found.length === 0) {
-      if (window.ethereum) return connectWith(window.ethereum);
+      if (window.ethereum) return connectWith(window.ethereum, "injected");
       return log("No wallet found. Install MetaMask or another browser wallet", true);
     }
-    if (found.length === 1) return connectWith(found[0].provider);
+    if (found.length === 1) return connectWith(found[0].provider, found[0].info.rdns);
     const menu = $("walletMenu");
     menu.querySelectorAll("button").forEach((b) => b.remove());
     for (const { info, provider: option } of found) {
@@ -549,7 +573,7 @@
       item.type = "button";
       item.setAttribute("role", "menuitem");
       item.innerHTML = `<img alt="" src="${info.icon}" />${info.name}`;
-      item.onclick = () => { closeMenu(); connectWith(option); };
+      item.onclick = () => { closeMenu(); connectWith(option, info.rdns); };
       menu.append(item);
     }
     menu.classList.remove("hidden");
@@ -570,7 +594,7 @@
     }
   }
 
-  async function connectWith(chosen) {
+  async function connectWith(chosen, id) {
     provider = chosen;
     let addr;
     try {
@@ -579,7 +603,24 @@
     } catch (error) {
       return log(error.shortMessage || error.message, true);
     }
+    store.set(WALLET_KEY, id);
+    await finishConnect(addr);
+  }
+
+  async function reconnect() {
+    const id = store.get(WALLET_KEY);
+    if (!id) return;
+    const known = id === "injected" ? window.ethereum : [...wallets.values()].find((w) => w.info.rdns === id)?.provider;
+    if (!known) return;
+    const [addr] = await known.request({ method: "eth_accounts" }).catch(() => []);
+    if (!addr) return;
+    provider = known;
+    await finishConnect(addr);
+  }
+
+  async function finishConnect(addr) {
     account = addr;
+    provider.on?.("accountsChanged", () => location.reload());
     wallet = createWalletClient({ chain, transport: custom(provider) });
     $("connect").textContent = short(addr);
     $("connect").className = "btn subtle address";
@@ -588,6 +629,7 @@
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
     $("watch").classList.remove("hidden");
+    restoreActivity();
     await refresh();
   }
 
@@ -643,6 +685,7 @@
     await refresh();
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     log(`Pool ready, position #${d.positionId} owned by <span class="addr">${short(owner)}</span>`);
+    await reconnect().catch(() => {});
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     log(`No testnet deployment found yet: ${error.message}`, true);
