@@ -430,6 +430,7 @@
   }
 
   function log(text, isError = false, hash = null) {
+    if (notes[0]?.text === text) return;
     notes = [{ text, isError, hash }, ...notes].slice(0, 10);
     renderActivity();
   }
@@ -628,7 +629,8 @@
     const button = $("submit");
     button.className = `btn lg ${!account ? "primary" : side === "buy" ? "long" : "short"}`;
     button.disabled = Boolean(account) && (!amount || blocked);
-    button.textContent = !account ? "Connect wallet" : side === "buy" ? "Buy TICKS" : blocked ? "Nothing to sell into yet" : "Sell TICKS";
+    button.textContent = !account ? connectLabel() : side === "buy" ? "Buy TICKS" : blocked ? "Nothing to sell into yet" : "Sell TICKS";
+    if (!account) $("connect").textContent = connectLabel();
   }
 
   async function send(label, request) {
@@ -678,12 +680,46 @@
   });
   supplyBox.addEventListener("focusout", () => focusSupply(null));
 
+  const themeNow = () => (getComputedStyle(document.documentElement).colorScheme.includes("dark") ? "dark" : "light");
   $("theme").onclick = () => {
-    const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
-    const next = dark ? "light" : "dark";
+    const next = themeNow() === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem("ticks-theme", next); } catch {}
+    appKit?.setThemeMode(next);
   };
+
+  const REOWN_PROJECT_ID = "";
+  let appKit = null;
+
+  async function setupAppKit() {
+    if (!REOWN_PROJECT_ID) return;
+    const { createAppKit, WagmiAdapter } = await import("https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.js");
+    const network = {
+      id: chain.id, caipNetworkId: `eip155:${chain.id}`, chainNamespace: "eip155", name: chain.name,
+      nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls, blockExplorers: chain.blockExplorers, testnet: true,
+    };
+    const adapter = new WagmiAdapter({ projectId: REOWN_PROJECT_ID, networks: [network] });
+    appKit = createAppKit({
+      adapters: [adapter],
+      networks: [network],
+      defaultNetwork: network,
+      projectId: REOWN_PROJECT_ID,
+      metadata: { name: "TICKS Testnet", description: "Try the TICKS launch with test money", url: location.origin, icons: [`${location.origin}${location.pathname.replace(/[^/]*$/, "")}assets/ticks-coin.png`] },
+      features: { analytics: false, email: false, socials: false, swaps: false, onramp: false, send: false, history: false },
+      themeMode: themeNow(),
+      themeVariables: { "--w3m-accent": "#a3e635", "--w3m-font-family": "Inter, ui-sans-serif, system-ui, sans-serif", "--w3m-border-radius-master": "2px" },
+    });
+    appKit.subscribeAccount(async (state) => {
+      if (state.isConnected && state.address) {
+        if (account && account.toLowerCase() === state.address.toLowerCase()) return;
+        provider = appKit.getProvider?.("eip155") ?? appKit.getWalletProvider?.();
+        if (!provider) return;
+        await finishConnect(state.address);
+      } else if (account && state.status === "disconnected") {
+        location.reload();
+      }
+    });
+  }
 
   const wallets = new Map();
   window.addEventListener("eip6963:announceProvider", (event) => wallets.set(event.detail.info.uuid, event.detail));
@@ -697,11 +733,16 @@
     if (!event.target.closest(".wallet") && event.target.id !== "submit") closeMenu();
   });
 
+  const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const connectLabel = () => "Connect wallet";
+
   function openWallets() {
     const found = [...wallets.values()];
     if (found.length === 0) {
       if (window.ethereum) return connectWith(window.ethereum, "injected");
-      return log("No wallet found. Install MetaMask or another browser wallet", true);
+      return log(isPhone
+        ? "No wallet in this browser. Open this page inside your wallet app's browser, for example MetaMask, Rabby or Trust Wallet"
+        : "No wallet in this browser. Install a wallet extension like MetaMask or Rabby, then reload the page", true);
     }
     if (found.length === 1) return connectWith(found[0].provider, found[0].info.rdns);
     const menu = $("walletMenu");
@@ -717,7 +758,7 @@
     menu.classList.remove("hidden");
     $("connect").setAttribute("aria-expanded", "true");
   }
-  $("connect").onclick = () => (account ? null : openWallets());
+  $("connect").onclick = () => (appKit ? appKit.open(account ? { view: "Account" } : undefined) : account ? null : openWallets());
 
   async function useTestnet() {
     try {
@@ -782,7 +823,7 @@
   };
 
   $("submit").onclick = async () => {
-    if (!account) return openWallets();
+    if (!account) return appKit ? appKit.open() : openWallets();
     const amount = parseEther($("amount").value);
     if (side === "buy") {
       await send("Buy", {
@@ -821,7 +862,8 @@
     await refresh();
     status = "";
     renderActivity();
-    await reconnect().catch(() => {});
+    if (REOWN_PROJECT_ID) setupAppKit().catch((error) => log(`Wallet modal failed to load: ${error.message}`, true));
+    else await reconnect().catch(() => {});
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     status = `No testnet deployment found yet: ${error.message}`;
