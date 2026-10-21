@@ -320,7 +320,7 @@
         <button id="submit" class="btn lg primary" type="button">Connect wallet</button>
         <p class="note hidden" id="faucetNote">You need a little test ETH first, it's free at <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">faucet.testnet.chain.robinhood.com</a></p>
         <button id="watch" class="btn subtle hidden" type="button"><img src="assets/ticks-coin.png" alt="" />Add TICKS to your wallet</button>
-        <p class="note hidden" id="importNote">If your wallet doesn't open, add it by hand: Import tokens in the wallet, then paste the address <button type="button" class="copy" id="copyToken">--</button></p>
+        <p class="note hidden" id="importNote"><span id="importText">If your wallet doesn't open, add it by hand: Import tokens in the wallet, then paste the address</span> <button type="button" class="copy" id="copyToken">--</button></p>
       </div>
     </section>
 
@@ -860,7 +860,10 @@
     const owner = await pub.readContract({ address: d.positionManager, abi: posmAbi, functionName: "ownerOf", args: [BigInt(d.positionId)] });
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
-    $("watch").classList.remove("hidden");
+    $("watch").classList.toggle("hidden", usesWalletConnect());
+    $("importText").textContent = usesWalletConnect()
+      ? "To see TICKS in your wallet app, open Import tokens there with the Robinhood test network selected and paste the address"
+      : "If your wallet doesn't open, add it by hand: Import tokens in the wallet, then paste the address";
     $("importNote").classList.remove("hidden");
     renderActivity();
     await refresh();
