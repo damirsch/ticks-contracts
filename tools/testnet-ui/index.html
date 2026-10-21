@@ -218,6 +218,8 @@
     .line b { color: var(--fg); font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
     .note { margin: 0; color: var(--muted); font-size: 13px; text-wrap: pretty; }
     .note.warn { color: var(--warn); }
+    .copy { background: none; border: 0; padding: 0; color: var(--fg); font: 500 13px var(--mono); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; cursor: pointer; }
+    .copy:hover { text-decoration-color: var(--fg); }
 
     .owner { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
     .owner p { margin: 0; color: var(--muted); font-size: 14px; }
@@ -318,6 +320,7 @@
         <button id="submit" class="btn lg primary" type="button">Connect wallet</button>
         <p class="note hidden" id="faucetNote">You need a little test ETH first, it's free at <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noreferrer">faucet.testnet.chain.robinhood.com</a></p>
         <button id="watch" class="btn subtle hidden" type="button"><img src="assets/ticks-coin.png" alt="" />Add TICKS to your wallet</button>
+        <p class="note hidden" id="importNote">If your wallet doesn't open, add it by hand: Import tokens in the wallet, then paste the address <button type="button" class="copy" id="copyToken">--</button></p>
       </div>
     </section>
 
@@ -374,7 +377,7 @@
   const $ = (id) => document.getElementById(id);
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
   const pub = createPublicClient({ chain, transport: http(rpc) });
-  let markDeploymentReady;
+  let markDeploymentReady, tokenSymbol = "TICKS";
   const deploymentReady = new Promise((resolve) => (markDeploymentReady = resolve));
   let d, wallet, account, provider, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
 
@@ -640,7 +643,9 @@
   async function send(label, request) {
     try {
       await useTestnet();
-      const hash = await wallet.writeContract({ account, chain, ...request });
+      const pending = wallet.writeContract({ account, chain, ...request });
+      nudgeWallet();
+      const hash = await pending;
       log(`${label} sent, waiting for the network ${txLink(hash)}`, false, hash);
       const receipt = await pub.waitForTransactionReceipt({ hash });
       notes = notes.filter((n) => n.hash !== hash);
@@ -789,7 +794,26 @@
   }
   $("connect").onclick = () => openConnect(account ? "Account" : undefined);
 
+  const WALLET_SCHEMES = { metamask: "metamask://", trust: "trust://", rainbow: "rainbow://", coinbase: "cbwallet://" };
+  const usesWalletConnect = () => Boolean(provider?.session);
+
+  function walletAppLink() {
+    const meta = provider?.session?.peer?.metadata;
+    if (meta?.redirect?.native) return meta.redirect.native;
+    if (meta?.redirect?.universal) return meta.redirect.universal;
+    const name = (meta?.name || "").toLowerCase();
+    return Object.entries(WALLET_SCHEMES).find(([key]) => name.includes(key))?.[1] ?? null;
+  }
+
+  function nudgeWallet() {
+    if (!isPhone || !usesWalletConnect()) return;
+    const link = walletAppLink();
+    log("Approve it in your wallet app");
+    if (link) setTimeout(() => { location.href = link; }, 300);
+  }
+
   async function useTestnet() {
+    if (usesWalletConnect()) return;
     try {
       await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_HEX }] });
     } catch (error) {
@@ -837,15 +861,27 @@
     $("ownerPanel").classList.toggle("hidden", owner.toLowerCase() !== addr.toLowerCase());
     $("positionLabel").textContent = `#${d.positionId}`;
     $("watch").classList.remove("hidden");
+    $("importNote").classList.remove("hidden");
     renderActivity();
     await refresh();
   }
 
+  $("copyToken").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(d.token);
+      $("copyToken").textContent = "Copied";
+      setTimeout(() => ($("copyToken").textContent = short(d.token)), 1500);
+    } catch {
+      log(`Token address: ${d.token}`);
+    }
+  };
+
   $("watch").onclick = async () => {
     try {
-      const symbol = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "symbol" });
-      const added = await provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: d.token, symbol, decimals: 18 } } });
-      if (added) log(`${symbol} added to your wallet`);
+      const pending = provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: d.token, symbol: tokenSymbol, decimals: 18 } } });
+      nudgeWallet();
+      const added = await pending;
+      if (added) log(`${tokenSymbol} added to your wallet`);
     } catch (error) {
       log(error.shortMessage || error.message, true);
     }
@@ -888,6 +924,8 @@
     floor = BigInt(d.launchSqrtPriceX96);
     markDeploymentReady();
     $("tokenLink").textContent = short(d.token);
+    $("copyToken").textContent = short(d.token);
+    tokenSymbol = await pub.readContract({ address: d.token, abi: erc20Abi, functionName: "symbol" }).catch(() => "TICKS");
     $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
     status = "";
