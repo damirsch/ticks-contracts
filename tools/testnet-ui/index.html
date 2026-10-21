@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TICKS Testnet</title>
   <link rel="icon" href="assets/ticks-coin.png" />
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.js" crossorigin />
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit-DSMu6gPS.js" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" />
@@ -372,6 +374,8 @@
   const $ = (id) => document.getElementById(id);
   const rpc = new URLSearchParams(location.search).get("rpc") || undefined;
   const pub = createPublicClient({ chain, transport: http(rpc) });
+  let markDeploymentReady;
+  const deploymentReady = new Promise((resolve) => (markDeploymentReady = resolve));
   let d, wallet, account, provider, side = "buy", floor = 0n, pool = null, balances = { eth: 0n, tok: 0n };
 
   const fmt = (n, digits = 2) => n.toLocaleString("en-US", { maximumFractionDigits: digits });
@@ -712,6 +716,7 @@
     appKit.subscribeAccount(async (state) => {
       if (state.isConnected && state.address) {
         if (account && account.toLowerCase() === state.address.toLowerCase()) return;
+        await deploymentReady;
         provider = appKit.getProvider?.("eip155") ?? appKit.getWalletProvider?.();
         if (!provider) return;
         await finishConnect(state.address);
@@ -734,7 +739,8 @@
   });
 
   const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const connectLabel = () => "Connect wallet";
+  let walletsLoading = false;
+  const connectLabel = () => (walletsLoading ? "Loading wallets" : "Connect wallet");
 
   function openWallets() {
     const found = [...wallets.values()];
@@ -758,7 +764,30 @@
     menu.classList.remove("hidden");
     $("connect").setAttribute("aria-expanded", "true");
   }
-  $("connect").onclick = () => (appKit ? appKit.open(account ? { view: "Account" } : undefined) : account ? null : openWallets());
+  const appKitReady = REOWN_PROJECT_ID
+    ? setupAppKit().catch((error) => { log(`Wallet list failed to load: ${error.message}`, true); return null; })
+    : Promise.resolve(null);
+
+  async function openConnect(view) {
+    if (!REOWN_PROJECT_ID) return account ? null : openWallets();
+    walletsLoading = true;
+    quote();
+    await appKitReady;
+    if (!appKit) {
+      walletsLoading = false;
+      return quote();
+    }
+    const opened = new Promise((resolve) => {
+      const stop = appKit.subscribeState?.((state) => state.open && resolve(stop));
+      setTimeout(resolve, 15000);
+    });
+    appKit.open(view ? { view } : undefined);
+    const stop = await opened;
+    if (typeof stop === "function") stop();
+    walletsLoading = false;
+    quote();
+  }
+  $("connect").onclick = () => openConnect(account ? "Account" : undefined);
 
   async function useTestnet() {
     try {
@@ -823,7 +852,7 @@
   };
 
   $("submit").onclick = async () => {
-    if (!account) return appKit ? appKit.open() : openWallets();
+    if (!account) return openConnect();
     const amount = parseEther($("amount").value);
     if (side === "buy") {
       await send("Buy", {
@@ -857,13 +886,13 @@
   try {
     d = await (await fetch("/deployments/testnet.json", { cache: "no-store" })).json();
     floor = BigInt(d.launchSqrtPriceX96);
+    markDeploymentReady();
     $("tokenLink").textContent = short(d.token);
     $("tokenLink").href = `${chain.blockExplorers.default.url}/token/${d.token}`;
     await refresh();
     status = "";
     renderActivity();
-    if (REOWN_PROJECT_ID) setupAppKit().catch((error) => log(`Wallet modal failed to load: ${error.message}`, true));
-    else await reconnect().catch(() => {});
+    if (!REOWN_PROJECT_ID) await reconnect().catch(() => {});
     setInterval(() => refresh().catch(() => {}), 15000);
   } catch (error) {
     status = `No testnet deployment found yet: ${error.message}`;
